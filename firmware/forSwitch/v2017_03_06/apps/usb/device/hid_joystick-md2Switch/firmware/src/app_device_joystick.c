@@ -2,13 +2,15 @@
 //  SEGA MDmini Converter2 
 //  - MD/CyberStick to USB Converter -
 //
+//  MegaDrivemini2 Cyberstickモード対応版  
+//  Copyright 2022 @v9938
+//
 //  Nintendo Switch 対応版  
 //  Copyright 2022 @v9938
 //
 //  メガドライブ対応コントローラ(3B/6B),
 //	SHARP CyberStick(CZ-8NJ2),マイコンソフト XE-1AJを
-//  Nintendo Switchで使用できる、DirectInput方式のUSBコントローラ
-//  として使える様にするコンバータです。  
+//  DirectInput方式のUSBコントローラとして使える様にするコンバータです。  
 //
 
 // MicroChipのライセンス
@@ -152,6 +154,7 @@ unsigned char bDataMD6BXY ;			//Fighting Pad 6Bモード用XY格納位置番号
 
 #define HORI16B_BUTTON_LXY			0x03
 #define HORI16B_BUTTON_RXY			0x05
+#define HORI16B_BUTTON_HATXY		0x02
 
 #define HORI16B_BUTTON_Y			0x01
 #define HORI16B_BUTTON_B			0x02
@@ -168,6 +171,17 @@ unsigned char bDataMD6BXY ;			//Fighting Pad 6Bモード用XY格納位置番号
 #define HORI16B_BUTTON_RCLICK		0x08
 #define HORI16B_BUTTON_HOME			0x10
 #define HORI16B_BUTTON_CAPTURE		0x20
+
+// HORI Hut data
+#define HORI_HAT_UP           0x00
+#define HORI_HAT_UP_RIGHT     0x01
+#define HORI_HAT_RIGHT        0x02
+#define HORI_HAT_DOWN_RIGHT   0x03
+#define HORI_HAT_DOWN         0x04
+#define HORI_HAT_DOWN_LEFT    0x05
+#define HORI_HAT_LEFT         0x06
+#define HORI_HAT_UP_LEFT      0x07
+#define HORI_HAT_CENTER       0x08
 
 
 
@@ -447,7 +461,6 @@ void eepromConfigLoad(void)
     bDataCyMDZ = eepromReadByte(32+20+20+16+1);
     bDataMD6BXY = eepromReadByte(32+20+20+16+2);
 
-    
 }
 
 /*********************************************************************
@@ -552,6 +565,32 @@ void usbSerialInit(void)
 };
 
 
+/*********************************************************************
+* Function: void gotoBootloader(void);
+* Overview: Goto bootloader mode
+* PreCondition: None
+* Input: None
+* Output: None
+*
+********************************************************************/
+void gotoBootloader(void)
+{
+    INTCONbits.GIEL = 0;                                        				// 低割り込み禁止
+    INTCONbits.GIEH = 0;                                        				// 高割り込み禁止
+
+    PORTA = 0xFF;
+    PORTB = 0x0;
+    PORTC = 0x0;
+    LATA = 0xFF;
+    LATB = 0x0;
+    LATC = 0x0;
+    ANSEL = 0x00;
+    ANSELH = 0x00;
+    TRISB = 0xf0;                                               				//PORTB In:RB4/5/6/7
+    TRISC = 0x0f;                                               				//PORTC Input RC0-3
+
+    asm("goto 0x001C");                                         				//Bootloader Entryへ
+}
 
 /*********************************************************************
 * Function: void sendDataBufferInitialize(int)
@@ -645,6 +684,46 @@ int cyberInput(unsigned char *ptr) {
 
 }
 
+/*********************************************************************
+* Function: unsigned char makeHoriHatData(unsigned char,unsigned char)
+* Overview: HORI POKKENのHUT Dataを作成
+* PreCondition: None
+* Input: X,Yのアナログ値
+* Output: Hut data
+*
+********************************************************************/
+unsigned char makeHoriHatData(unsigned char x,unsigned char y)
+{  
+	unsigned char hat_data;
+	
+
+	// Left side
+	if (x < 0x40) {
+		// UP
+		if		(y < 0x40) hat_data = HORI_HAT_UP_LEFT;
+		// DOWN
+		else if	(y > 0xc0) hat_data = HORI_HAT_DOWN_LEFT;
+		// LEFT
+		else hat_data = HORI_HAT_LEFT;
+	// Right Side
+	}else if (x > 0xc0) {
+		// UP
+		if		(y < 0x40) hat_data = HORI_HAT_UP_RIGHT;
+		// DOWN
+		else if	(y > 0xc0) hat_data = HORI_HAT_DOWN_RIGHT;
+		// RIGHT
+		else hat_data = HORI_HAT_RIGHT;
+	// Center Side
+	}else{
+		// UP
+		if		(y < 0x40) hat_data = HORI_HAT_UP;
+		// DOWN
+		else if	(y > 0xc0) hat_data = HORI_HAT_DOWN;
+		// CENTER
+		else hat_data = HORI_HAT_CENTER;
+	}
+	return hat_data;
+}
 
 /*********************************************************************
 * Function: void makeMD6BDataForSEGAPAD(void)
@@ -656,6 +735,11 @@ int cyberInput(unsigned char *ptr) {
 ********************************************************************/
 void makeMD6BDataForSEGAPAD(void)
 {  
+	unsigned char x,y;
+	
+	x = 0x80;
+	y = 0x80;
+	
 	//SEGA6ボタンパッドの制約から
 	//このルーチンの再実行は1.8ms以上間隔を空ける必要がある
 
@@ -677,10 +761,10 @@ void makeMD6BDataForSEGAPAD(void)
     PORTBbits.RB5 = 1;
     _delay_us(100);
 
-    if (PORTCbits.RC0 == 0 ) joystick_input.val[bDataMD6BXY+1] = 0x00;						// UP     :RC0
-    if (PORTCbits.RC1 == 0 ) joystick_input.val[bDataMD6BXY+1] = 0xff;						// DOWN   :RC1
-    if (PORTCbits.RC2 == 0 ) joystick_input.val[bDataMD6BXY] = 0x00;						// LEFT   :RC2
-    if (PORTCbits.RC3 == 0 ) joystick_input.val[bDataMD6BXY] = 0xff;						// RIGH   :RC3
+    if (PORTCbits.RC0 == 0 ) y = 0x00;						// UP     :RC0
+    if (PORTCbits.RC1 == 0 ) y = 0xff;						// DOWN   :RC1
+    if (PORTCbits.RC2 == 0 ) x = 0x00;						// LEFT   :RC2
+    if (PORTCbits.RC3 == 0 ) x = 0xff;						// RIGH   :RC3
     // Button (3B)
     if (PORTBbits.RB4 == 0 ) VAL_MD6BDATA(MD6B_B);								// Button2 (B:RC6)
     if (PORTBbits.RB7 == 0 ) VAL_MD6BDATA(MD6B_C);								// Button6 (C:RC7)
@@ -704,7 +788,14 @@ void makeMD6BDataForSEGAPAD(void)
     }
     // 5State(3B PAD)/7State(6B PAD) (H)
     PORTBbits.RB5 = 1;
-
+    
+    // Hut Dataの処理 
+    if (bDataMD6BXY == 2 ){
+		joystick_input.val[bDataMD6BXY]   = makeHoriHatData(x,y);
+	}else{
+		joystick_input.val[bDataMD6BXY]   = x;
+		joystick_input.val[bDataMD6BXY+1] = y;
+	}
 }
 
 /*********************************************************************
@@ -719,6 +810,10 @@ void makeMD6BDataForAtari(void)
 {  
 	unsigned char x,y,z;
 
+	x = 0x80;
+	y = 0x80;
+	z = 0x80;
+	
     //Input Data
     CyberMode = cyberInput(CyberData);											// CyberStickのプロトコル処理
     																			// CyberModeは他でも参照しているので一度変数に入れる
@@ -726,16 +821,16 @@ void makeMD6BDataForAtari(void)
         //Cyber Stick Digital mode
         if ((CyberData[1] & 0x03) == 0  ){   VAL_MD6BCYBERDATA(CYBER_SELECT);	// Button7 (SELECT:MODE) ※XE1-APのみ対応
         }else{
-            if ((CyberData[1] & 0x01) == 0  ) 	joystick_input.val[bDataCyMDXY+1] = 0x00;  	// UP
-            if ((CyberData[1] & 0x02) == 0  ) 	joystick_input.val[bDataCyMDXY+1] = 0xFF;  	// DOWN
-            if ((CyberData[0] & 0x01) == 0  ) 	joystick_input.val[bDataCyMDZ] = 0x00;  	// Throt UP
-            if ((CyberData[0] & 0x02) == 0  ) 	joystick_input.val[bDataCyMDZ] = 0xFF;  	// Throt DOWN
+            if ((CyberData[1] & 0x01) == 0  ) 	y = 0x00;  	// UP
+            if ((CyberData[1] & 0x02) == 0  ) 	y = 0xFF;  	// DOWN
+            if ((CyberData[0] & 0x01) == 0  ) 	z = 0x00;  	// Throt UP
+            if ((CyberData[0] & 0x02) == 0  ) 	z = 0xFF;  	// Throt DOWN
         }
 
         if ((CyberData[1] & 0x0C) == 0  ){   VAL_MD6BCYBERDATA(CYBER_START);		// Button8 (START) ※XE1-APのみ対応
         }else{
-            if ((CyberData[1] & 0x04) == 0  ) 	joystick_input.val[bDataCyMDXY] = 0x00;  	// LEFT
-            if ((CyberData[1] & 0x08) == 0  ) 	joystick_input.val[bDataCyMDXY] = 0xFF;  	// RIGHT
+            if ((CyberData[1] & 0x04) == 0  ) 	x = 0x00;  	// LEFT
+            if ((CyberData[1] & 0x08) == 0  ) 	x = 0xFF;  	// RIGHT
             if ((CyberData[0] & 0x04) == 0  ) 	VAL_MD6BCYBERDATA(CYBER_C);		// Button6 (C)
             if ((CyberData[0] & 0x08) == 0  ) 	VAL_MD6BCYBERDATA(CYBER_D);		// Button4 (D:X)
         }
@@ -756,10 +851,6 @@ void makeMD6BDataForAtari(void)
         x = calFixedVal(x,centerX,muxXY,slewX);
         z = calFixedVal(z,centerZ,muxZ,slewZ);
 
-        joystick_input.val[bDataCyMDZ] = z;
-        joystick_input.val[bDataCyMDXY] = x;
-        joystick_input.val[bDataCyMDXY+1] = y;
-
 		// ボタンデータの作成
         if ((CyberData[12] & 0x02) == 0 ) 	VAL_MD6BCYBERDATA(CYBER_Ad);  		// Button3  (A')
         if ((CyberData[12] & 0x01) == 0 ) 	VAL_MD6BCYBERDATA(CYBER_Bd);		// Button2  (B')
@@ -773,6 +864,20 @@ void makeMD6BDataForAtari(void)
         if ((CyberData[3] & 0x02) == 0  ) 	VAL_MD6BCYBERDATA(CYBER_START);		// Button8  (START)
 
     }
+
+    // Hut Dataの処理 
+    if (bDataCyMDXY == HORI16B_BUTTON_HATXY ){
+		joystick_input.val[bDataCyMDXY]   = makeHoriHatData(x,y);
+	}else{
+		joystick_input.val[bDataCyMDXY]   = x;
+		joystick_input.val[bDataCyMDXY+1] = y;
+	}
+
+    if (bDataCyMDZ == HORI16B_BUTTON_HATXY ){
+        joystick_input.val[bDataCyMDZ]    = makeHoriHatData(0x80,z);
+	}else{
+        joystick_input.val[bDataCyMDZ]    = z;
+	}
 
 }
 
@@ -956,6 +1061,7 @@ void APP_DeviceJoystickCheckConnect(void)
         PORTBbits.RB5 = 1;
         _delay_us(100);
         if (PORTBbits.RB4 == 0 ) initE2PROM = true;  	       		    // Bが押されているのでE2PROM初期化を実行
+        if (PORTBbits.RB7 == 0 ) gotoBootloader();                      // Cが押されているのでFFUモードBOOTLOADERに戻る
         MDMODE_LEDON;                                                   // MDモードにセット
     }
 
