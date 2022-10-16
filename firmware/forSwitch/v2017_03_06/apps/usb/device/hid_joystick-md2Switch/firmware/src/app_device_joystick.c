@@ -947,13 +947,66 @@ void makeConfigDataSendRawData(void)
 ********************************************************************/
 void makeConfigDataSendSettingData(void)
 {  
+	int i;
+
     ToSendDataBuffer.val[1] = muxXY;            								//2=1x mode 3=1.5x mode 4=2xmode
     ToSendDataBuffer.val[2] = muxZ;            									//2=1x mode 3=1.5x mode 4=2xmode
     ToSendDataBuffer.val[3] = centerX;          								//センターの無視する値(X)
     ToSendDataBuffer.val[4] = centerY;          								//センターの無視する値(Y)
     ToSendDataBuffer.val[5] = centerZ;          								//センターの無視する値(Z)
+
+
 	makeConfigDataFillZero(6);
+
 }
+
+/*********************************************************************
+* Function: void makeConfigDataSendMd16Setting(void)
+* Overview: MD16PADのボタン設定値を返す
+* PreCondition: Call from APP_DeviceJoystickTasks
+* Input: None
+* Output: None
+*
+********************************************************************/
+void makeConfigDataSendMd16Setting(void)
+{  
+	int i;
+
+	for (i=0;i<16;i++){
+		ToSendDataBuffer.val[1+i]			= bDataMD6B[i];
+	}
+	ToSendDataBuffer.val[1+16+0]			= bDataMD6BXY;
+
+	makeConfigDataFillZero(18);
+
+}
+
+
+/*********************************************************************
+* Function: void makeConfigDataSendCyberSetting(void)
+* Overview: CyberStickのボタン設定値を返す
+* PreCondition: Call from APP_DeviceJoystickTasks
+* Input: None
+* Output: None
+*
+********************************************************************/
+void makeConfigDataSendCyberSetting(void)
+{  
+	int i;
+
+	for (i=0;i<20;i++){
+	    ToSendDataBuffer.val[1+i]			= bDataCyber[i];
+	}
+	for (i=0;i<20;i++){
+		ToSendDataBuffer.val[1+20+i]		= bDataCyMDmode[i];
+	}
+	ToSendDataBuffer.val[1+20+20+0]		= bDataCyMDXY;
+	ToSendDataBuffer.val[1+20+20+1]		= bDataCyMDZ ;
+
+	makeConfigDataFillZero(43);
+
+}
+
 
 /*********************************************************************
 * Function: void makeConfigDataOK(void)
@@ -1160,7 +1213,7 @@ void APP_DeviceJoystickTasks(void)
                 makeConfigDataSendRawData();
             break;
 
-            case 0x03:  //Send Setting Data
+            case 0x03:  //Send Setting Data (Cyber XY Setting)
                 makeConfigDataSendSettingData();
             break;
 
@@ -1177,6 +1230,7 @@ void APP_DeviceJoystickTasks(void)
                 makeConfigDataOK();
 
             break;
+
 
             case 0x81:  //Set MD6B mode  KeyAssign
             	//データの配置とボタンフォーマットはDefinitionを参照
@@ -1203,14 +1257,22 @@ void APP_DeviceJoystickTasks(void)
                 eepromConfigMake(); 
                 makeConfigDataOK();
             break;
+
+            case 0x85:  //Send Botton Setting (MD16B)
+                makeConfigDataSendMd16Setting();
+            break;
+
+            case 0x86:  //Send Botton Setting (Cyber)
+                makeConfigDataSendCyberSetting();
+            break;
+
             case 0x05:  //EEPROM Setting 
 				// E2PROMに設定値を保存する。
                 eepromConfigSave();
                 eepromBDataSave();
                 makeConfigDataOK();
             break;
-
-            
+           
             default:
                 if (ReceivedDataBuffer.val[0] != 0){
 					makeConfigDataERR();									//非対応CMD

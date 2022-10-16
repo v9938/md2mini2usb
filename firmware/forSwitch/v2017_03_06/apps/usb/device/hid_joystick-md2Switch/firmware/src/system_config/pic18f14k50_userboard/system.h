@@ -72,7 +72,7 @@ void SYSTEM_Initialize( SYSTEM_STATE state );
 //void SYSTEM_Tasks(void);
 #define SYSTEM_Tasks()
 
-const uint16_t VersionWord @ 0x0816 = 0x8110;	// BCD表現のバージョン No.
+const uint16_t VersionWord @ 0x0816 = 0x8120;	// BCD表現のバージョン No.
 #define	SOFTWEAR_VERSION	"SEGA MDmini Converter2 Ver1.10SW"
 #define BOOTLOADER_VERSION_MAJOR	1 // Legal value 0-255
 #define BOOTLOADER_VERSION_MINOR	2 // Legal value 0-99.  (1 = X.01)
