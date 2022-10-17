@@ -37,11 +37,11 @@ MD2mini2USBは、ジョイスティックコンバータです。
 
 ### BEEP  
 
-URL未定  
+<https://www.beep-shop.com/ec/products/detail/28588>
 
 ### 家電のKENちゃん  
 
-URL未定  
+<https://www.kadenken.com/view/item/000000001480?category_page_id=ct169>
 
 ### Booth: (週１回の発送)  
 
