@@ -252,7 +252,7 @@ XE1AJ-USB販売後に専用ソフトで変更できる様にする予定です�
 | 定格 | 5V 50mA (ポリヒューズ250mA)|
 | コントローラ規格 | USB2.0 HIDゲームコントローラ準拠(Direct Input方式) |
 | キースキャン間隔<BR>(SEGA ファイティングパッド6B互換モード) | 10ms(設定値)/8ms(実測値) |  
-| キースキャン間隔<BR>(XE1AJ-USB互換モード時) | 8ms(設定値)/8ms(実測値) |
+| キースキャン間隔<BR>(XE1AJ-USB互換モード時) | 1ms(設定値)/1ms(実測値) |
 | IN パケット応答時間 | メガドライブ6ボタンパッド使用時 8.5us(実測値)<BR>CyberStick使用時 8.4us(実測値) |
 | 対応コントローラ | メガドライブ規格準拠コントローラ(8pin GND)<BR>MSX規格準拠コントローラ(9pin GND) |
 | 動作確認環境 | Windows11/10/7<BR>SEGA MegaDrive mini/Genesis mini<BR>SEGA MegaDrive2 mini/Genesis2 mini<BR>Nintendo SWITCH |
