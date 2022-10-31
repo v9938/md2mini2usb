@@ -5,9 +5,6 @@
 //  MegaDrivemini2 Cyberstickモード対応版  
 //  Copyright 2022 @v9938
 //
-//  Nintendo Switch 対応版  
-//  Copyright 2022 @v9938
-//
 //  メガドライブ対応コントローラ(3B/6B),
 //	SHARP CyberStick(CZ-8NJ2),マイコンソフト XE-1AJを
 //  DirectInput方式のUSBコントローラとして使える様にするコンバータです。  
@@ -60,9 +57,18 @@
 #define ERR_TIMEOUT 1
 #define ERR_NONE 0
 
+//スイッチ関係の設定
+#define TRISMODE_EQMD		(TRISB == 0xD0)
+#define DSUBPIN8_EQGND		(PORTBbits.RB6==0)
+#define DSUBPIN9_EQGND		(PORTBbits.RB7==0)
+
+
 #define MDMODE_LEDON        PORTCbits.RC7 = 1
 #define MDMODE_LEDOFF       PORTCbits.RC7 = 0
 #define MDMODE_EQON       	(PORTCbits.RC7 == 1)
+
+//3Bモードの長押しLOOP数 8ms*255 =約2秒
+#define MD3B_MODE_TIMEOUT	400
 
 #define CYBER_REQOFF        PORTBbits.RB6 = 1
 #define CYBER_REQON         PORTBbits.RB6 = 0
@@ -71,13 +77,23 @@
 #define CYBER_LH_EQLOW    	(PORTBbits.RB4 == 0)
 #define CYBER_ACK_EQLOW   	(PORTBbits.RB5 == 0)
 
+#define CYBERMD_REQOFF        PORTBbits.RB5 = 1
+#define CYBERMD_REQON         PORTBbits.RB5 = 0
+#define CYBERMD_LH_EQHIGH   	(PORTBbits.RB4 == 1)
+#define CYBERMD_ACK_EQHIGH  	(PORTBbits.RB7 == 1)
+#define CYBERMD_LH_EQLOW    	(PORTBbits.RB4 == 0)
+#define CYBERMMD_ACK_EQLOW   	(PORTBbits.RB7 == 0)
+
 ///////////////////////////////////////////////////////////////////////
 // Global Value
 ///////////////////////////////////////////////////////////////////////
 unsigned char IncomingHIDCBSetReport =0;
-unsigned char CyberData[13];
+unsigned char CyberData[14];
+unsigned short Md3bModeSWCount;
 
 int CyberMode;							// CyberStickの入力状態 (0=正常[アナログモード] 1=TIMEOUT[デジタルモード])
+int XE1APMode;							// XE1AP(メガドラモード）フラグ
+
 uint8_t centerX,centerY,centerZ;		// CyberStickの入力の中心遊び値
 uint8_t muxXY, muxZ;					// CyberStickの移動量(1=0.5x,2=1.0x,3=1.5x,4=2.0x)
 unsigned short slewX,slewY,slewZ;		// 設定値から計算できる増分値
@@ -89,6 +105,11 @@ unsigned char bDataCyber[20];			//CyberStickモード用
 unsigned char bDataCyMDmode[20];		//CyberStick(MD6B)モード用
 unsigned char bDataCyMDXY;				//CyberStick(MD6B)モード用XY格納位置番号
 unsigned char bDataCyMDZ;				//CyberStick(MD6B)モード用Z格納位置番号
+unsigned char bDataCyberXY;				//CyberStickモード用XY格納位置番号
+unsigned char bDataCyberZ;				//CyberStick	モード用Z格納位置番号
+unsigned char bDataCyberRvXYZ;			//CyberStickモード用XYZ反転フラグ
+unsigned char bDataMD6B[16];			//Fighting Pad 6Bモード用
+unsigned char bDataMD6BXY ;				//Fighting Pad 6Bモード用XY格納位置番号
 
 
 //Cyber Stick ボタンデータ配置
@@ -105,9 +126,6 @@ unsigned char bDataCyMDZ;				//CyberStick(MD6B)モード用Z格納位置番号
 // 18/19: 		B'ボタンの配置情報
 
 
-
-unsigned char bDataMD6B[16];		//Fighting Pad 6Bモード用
-unsigned char bDataMD6BXY ;			//Fighting Pad 6Bモード用XY格納位置番号
 
 
 //MD6B ボタンデータ配置
@@ -141,6 +159,15 @@ unsigned char bDataMD6BXY ;			//Fighting Pad 6Bモード用XY格納位置番号
 #define CYBER_Ad					16
 #define CYBER_Bd					18
 
+//XYZのIN PACKET位置
+#define MD6B_XY_STICK				0x3
+#define MD6B_Z_STICK				0x2
+
+#define CYBER_XY_STICK				0x3
+#define CYBER_Z_STICK				0x6
+#define CYBER_HAT_STICK				0x2
+
+//ボタンのIN PACKETフラグ位置
 #define MD6B_BUTTON1_ON				0x10
 #define MD6B_BUTTON2_ON				0x20
 #define MD6B_BUTTON3_ON				0x40
@@ -152,42 +179,39 @@ unsigned char bDataMD6BXY ;			//Fighting Pad 6Bモード用XY格納位置番号
 #define MD6B_BUTTON9_ON				0x10
 #define MD6B_BUTTON10_ON			0x20
 
-#define HORI16B_BUTTON_LXY			0x03
-#define HORI16B_BUTTON_RXY			0x05
-#define HORI16B_BUTTON_HATXY		0x02
+#define CYBER_BUTTON1_ON			0x01
+#define CYBER_BUTTON2_ON			0x02
+#define CYBER_BUTTON3_ON			0x04
+#define CYBER_BUTTON4_ON			0x08
+#define CYBER_BUTTON5_ON			0x10
+#define CYBER_BUTTON6_ON			0x20
+#define CYBER_BUTTON7_ON			0x40
+#define CYBER_BUTTON8_ON			0x80
 
-#define HORI16B_BUTTON_Y			0x01
-#define HORI16B_BUTTON_B			0x02
-#define HORI16B_BUTTON_A			0x04
-#define HORI16B_BUTTON_X			0x08
-#define HORI16B_BUTTON_L			0x10
-#define HORI16B_BUTTON_R			0x20
-#define HORI16B_BUTTON_ZL			0x40
-#define HORI16B_BUTTON_ZR			0x80
-//+1
-#define HORI16B_BUTTON_MINUS		0x01
-#define HORI16B_BUTTON_PLUS			0x02
-#define HORI16B_BUTTON_LCLICK		0x04
-#define HORI16B_BUTTON_RCLICK		0x08
-#define HORI16B_BUTTON_HOME			0x10
-#define HORI16B_BUTTON_CAPTURE		0x20
+// Hut data
+#define HAT_UP           0x00
+#define HAT_UP_RIGHT     0x01
+#define HAT_RIGHT        0x02
+#define HAT_DOWN_RIGHT   0x03
+#define HAT_DOWN         0x04
+#define HAT_DOWN_LEFT    0x05
+#define HAT_LEFT         0x06
+#define HAT_UP_LEFT      0x07
+#define HAT_CENTER       0x08
 
-// HORI Hut data
-#define HORI_HAT_UP           0x00
-#define HORI_HAT_UP_RIGHT     0x01
-#define HORI_HAT_RIGHT        0x02
-#define HORI_HAT_DOWN_RIGHT   0x03
-#define HORI_HAT_DOWN         0x04
-#define HORI_HAT_DOWN_LEFT    0x05
-#define HORI_HAT_LEFT         0x06
-#define HORI_HAT_UP_LEFT      0x07
-#define HORI_HAT_CENTER       0x08
+//CyberStickのXYZ軸を反転させるかのフラグ位置
+#define CYBER_MD6B_RVX			0x01
+#define CYBER_MD6B_RVY			0x02
+#define CYBER_MD6B_RVZ			0x04
+#define CYBER_RVX				0x10
+#define CYBER_RVY				0x20
+#define CYBER_RVZ				0x40
+#define CYBER_HATRVZ			0x80
 
 
-
-#define VAL_MD6BDATA(r)			{joystick_input.val[0] |= bDataMD6B[r]; 	joystick_input.val[1] |= bDataMD6B[r+1];	}
-#define VAL_MD6BCYBERDATA(r)	{joystick_input.val[0] |= bDataCyMDmode[r]; joystick_input.val[1] |= bDataCyMDmode[r+1];}
-#define VAL_CYBERDATA(r)		{joystick_input.val[5] |= bDataCyber[r]; 	joystick_input.val[6] |= bDataCyber[r+1];	}
+#define VAL_MD6BDATA(r)			{joystick_input.val[5] |= bDataMD6B[r]; 	joystick_input.val[6] |= bDataMD6B[r+1];	}
+#define VAL_MD6BCYBERDATA(r)	{joystick_input.val[5] |= bDataCyMDmode[r]; joystick_input.val[6] |= bDataCyMDmode[r+1];}
+#define VAL_CYBERDATA(r)		{joystick_input.val[0] |= bDataCyber[r]; 	joystick_input.val[1] |= bDataCyber[r+1];	}
 
 
 /** TYPE DEFINITIONS ************************************************/
@@ -390,7 +414,7 @@ void eepromWriteByte(unsigned char address, unsigned char data)
 ********************************************************************/
 void eepromConfigSave(void)
 {  
-    eepromWriteByte(0,0xA5);
+    eepromWriteByte(0,0x9A);
     eepromWriteByte(1, centerX);
     eepromWriteByte(2, centerY);
     eepromWriteByte(3, centerZ);
@@ -421,7 +445,10 @@ void eepromBDataSave(void)
 	eepromWriteByte(32+20+20+16+0, bDataCyMDXY);
 	eepromWriteByte(32+20+20+16+1, bDataCyMDZ);
 	eepromWriteByte(32+20+20+16+2, bDataMD6BXY);
-    
+	eepromWriteByte(32+20+20+16+3, bDataCyberXY);
+	eepromWriteByte(32+20+20+16+4, bDataCyberZ);
+	eepromWriteByte(32+20+20+16+5, bDataCyberRvXYZ);
+
 }
 
 /*********************************************************************
@@ -457,15 +484,18 @@ void eepromConfigLoad(void)
 	for (i=0;i<16;i++){
 	    bDataMD6B[i] = eepromReadByte(32+20+20+i);
 	}
+    
     bDataCyMDXY = eepromReadByte(32+20+20+16+0);
     bDataCyMDZ = eepromReadByte(32+20+20+16+1);
     bDataMD6BXY = eepromReadByte(32+20+20+16+2);
-
+    bDataCyberXY = eepromReadByte(32+20+20+16+3);
+    bDataCyberZ = eepromReadByte(32+20+20+16+4);
+	bDataCyberRvXYZ = eepromReadByte(32+20+20+16+5);
 }
 
 /*********************************************************************
 * Function: void eepromConfigMake(void)
-* Overview: E2PROMに設定初期値を保存する
+* Overview: E2PROMに設定初期値を作成して保存する
 * PreCondition: None
 * Input: None
 * Output: None
@@ -499,33 +529,49 @@ void eepromConfigMake(void)
 	//ボタン4までのval5のデータは偶数、
 	//ボタン5からのVal6のデータは奇数に設定
 	
-    bDataMD6B[MD6B_A]				= HORI16B_BUTTON_A;			// Aボタン [0-1]
-    bDataMD6B[MD6B_B]				= HORI16B_BUTTON_B;			// Bボタン [2-3]
-    bDataMD6B[MD6B_C]				= HORI16B_BUTTON_R;		// Cボタン [4-5]
-    bDataMD6B[MD6B_X]				= HORI16B_BUTTON_X;			// ボタン [6-7]
-    bDataMD6B[MD6B_Y] 				= HORI16B_BUTTON_Y;			// Yボタン [8-9]
-    bDataMD6B[MD6B_Z]				= HORI16B_BUTTON_L;			// Zボタン [10-11]
-    bDataMD6B[MD6B_START +1] 		= HORI16B_BUTTON_PLUS;		// STARTボタン [12-13]
-    bDataMD6B[MD6B_MODE +1 ] 		= HORI16B_BUTTON_HOME;		// MODEボタン  [14-15]
+    bDataMD6B[MD6B_A]				= MD6B_BUTTON3_ON;	// Aボタン [0-1]
+    bDataMD6B[MD6B_B]				= MD6B_BUTTON2_ON;	// Bボタン [2-3]
+    bDataMD6B[MD6B_C +1]			= MD6B_BUTTON6_ON;	// Cボタン [4-5]
+    bDataMD6B[MD6B_X]				= MD6B_BUTTON4_ON;	// Xボタン [6-7]
+    bDataMD6B[MD6B_Y] 				= MD6B_BUTTON1_ON;	// Yボタン [8-9]
+    bDataMD6B[MD6B_Z +1]			= MD6B_BUTTON5_ON;	// Zボタン [10-11]
+    bDataMD6B[MD6B_START +1] 		= MD6B_BUTTON10_ON;	// STARTボタン [12-13]
+    bDataMD6B[MD6B_MODE +1 ] 		= MD6B_BUTTON9_ON;	// MODEボタン  [14-15]
     
 	//CyberStickモードのボタン初期値(MD6Bモード時)
 	//ボタン4までのval5のデータは偶数、
 	//ボタン5からのVal6のデータは奇数に設定
-    bDataCyMDmode[CYBER_A]			= HORI16B_BUTTON_A;			// Aボタン [0-1]
-    bDataCyMDmode[CYBER_B]			= HORI16B_BUTTON_B;			// Bボタン [2-3]
-    bDataCyMDmode[CYBER_C]			= HORI16B_BUTTON_Y;		// Cボタン [4-5]
-    bDataCyMDmode[CYBER_D]			= HORI16B_BUTTON_X;			// Dボタン [6-7]
-    bDataCyMDmode[CYBER_E1]			= HORI16B_BUTTON_R;			// E1ボタン [8-9]
-    bDataCyMDmode[CYBER_E2]			= HORI16B_BUTTON_L;			// E2ボタン [10-11]
-    bDataCyMDmode[CYBER_START +1]	= HORI16B_BUTTON_PLUS;		// STARTボタン [12-13]
-    bDataCyMDmode[CYBER_SELECT +1]	= HORI16B_BUTTON_HOME;		// SELECTボタン  [14-15]
-    bDataCyMDmode[CYBER_Ad]			= HORI16B_BUTTON_A;			// A'ボタン [16-17]
-    bDataCyMDmode[CYBER_Bd]			= HORI16B_BUTTON_B;		// B'ボタン  [18-19]
+    bDataCyMDmode[CYBER_A]			= MD6B_BUTTON3_ON;	// Aボタン [0-1]
+    bDataCyMDmode[CYBER_B]			= MD6B_BUTTON2_ON;	// Bボタン [2-3]
+    bDataCyMDmode[CYBER_C +1]		= MD6B_BUTTON6_ON;	// Cボタン [4-5]
+    bDataCyMDmode[CYBER_D]			= MD6B_BUTTON4_ON;	// Dボタン [6-7]
+    bDataCyMDmode[CYBER_E1]			= MD6B_BUTTON1_ON;	// E1ボタン [8-9]
+    bDataCyMDmode[CYBER_E2 +1]		= MD6B_BUTTON5_ON;	// E2ボタン [10-11]
+    bDataCyMDmode[CYBER_START +1]	= MD6B_BUTTON10_ON;	// STARTボタン [12-13]
+    bDataCyMDmode[CYBER_SELECT +1]	= MD6B_BUTTON9_ON;	// SELECTボタン  [14-15]
+    bDataCyMDmode[CYBER_Ad]			= MD6B_BUTTON3_ON;	// A'ボタン [16-17]
+    bDataCyMDmode[CYBER_Bd]			= MD6B_BUTTON2_ON;	// B'ボタン  [18-19]
 
-    bDataCyMDXY = HORI16B_BUTTON_LXY;
-    bDataCyMDZ = HORI16B_BUTTON_RXY +1 ;
-    bDataMD6BXY = HORI16B_BUTTON_LXY;
+	//CyberStickモードのボタン初期値(XE1AJ-USBモード時)
+	//ボタン4までのval5のデータは偶数、
+	//ボタン5からのVal6のデータは奇数に設定
+    bDataCyber[CYBER_A]  			= CYBER_BUTTON1_ON;	// Aボタン [0-1]
+    bDataCyber[CYBER_B]  			= CYBER_BUTTON2_ON;	// Bボタン [2-3]
+    bDataCyber[CYBER_C]  			= CYBER_BUTTON3_ON;	// Cボタン [4-5]
+    bDataCyber[CYBER_D]  			= CYBER_BUTTON4_ON;	// Dボタン [6-7]
+    bDataCyber[CYBER_E1]			= CYBER_BUTTON5_ON;	// E1ボタン [8-9]
+    bDataCyber[CYBER_E2]			= CYBER_BUTTON6_ON;	// E2ボタン [10-11]
+    bDataCyber[CYBER_START] 		= CYBER_BUTTON8_ON;	// STARTボタン [12-13]
+    bDataCyber[CYBER_SELECT]		= CYBER_BUTTON7_ON;	// SELECTボタン  [14-15]
+    bDataCyber[CYBER_Ad] 			= CYBER_BUTTON1_ON;	// A'ボタン [16-17]
+    bDataCyber[CYBER_Bd] 			= CYBER_BUTTON2_ON;	// B'ボタン  [18-19]
 
+    bDataCyMDXY = MD6B_XY_STICK; 	// CyberStick MD6Bモード時のXYデータ位置
+    bDataCyMDZ = MD6B_Z_STICK;		// CyberStick MD6Bモード時のZデータ位置
+    bDataMD6BXY = MD6B_XY_STICK;	// MD6Bモード時のXYデータ位置
+    bDataCyberXY = CYBER_XY_STICK; 	// CyberStick モード時のXYデータ位置
+    bDataCyberZ = CYBER_Z_STICK;	// CyberStick モード時のXYデータ位置
+	bDataCyberRvXYZ = CYBER_RVZ | CYBER_MD6B_RVZ ;	//XYZのデータ反転フラグ
 	eepromBDataSave();															// ボタン設定値をE2PROMの保存
 }
     
@@ -583,14 +629,14 @@ void sendDataBufferInitialize(int j)
 
 
 /*********************************************************************
-* Function: int cyberInput(unsigned char *)
+* Function: int cyberAtariInput(unsigned char *)
 * Overview: ATARIジョイスティック/CyberStickの通信ルーチン
 * PreCondition: None
 * Input: 読み取りデータの格納先
 * Output: TIMEOUT
 *
 ********************************************************************/
-int cyberInput(unsigned char *ptr) {
+int cyberAtariInput(unsigned char *ptr) {
 // ボタン配置データ
 // [0][1]のデータはTIMEOUT時のみ有効、デジタルモードはこちらを参照
 // CyberData[0] = 0b00[PIN7][PIN6]_[PIN4][PIN3][PIN2][PIN1] (PIN8=Hのデータ)
@@ -658,45 +704,104 @@ int cyberInput(unsigned char *ptr) {
 }
 
 /*********************************************************************
-* Function: unsigned char makeHoriHatData(unsigned char,unsigned char)
-* Overview: HORI POKKENのHUT Dataを作成
+* Function: int cyberInput(unsigned char *)
+* Overview: MD modeでのCyberStickの通信ルーチン
 * PreCondition: None
-* Input: X,Yのアナログ値
-* Output: Hut data
+* Input: 読み取りデータの格納先
+* Output: TIMEOUT
 *
 ********************************************************************/
-unsigned char makeHoriHatData(unsigned char x,unsigned char y)
-{  
-	unsigned char hat_data;
-	
+int cyberMdInput(unsigned char *ptr) {
+// ボタン配置データ
+// [0][1]のデータはTIMEOUT時のみ有効、デジタルモードはこちらを参照
+// CyberData[0] = 0b00[PIN7][PIN6]_[PIN4][PIN3][PIN2][PIN1] (PIN8=Hのデータ)
+// CyberData[1] = 0b00[PIN7][PIN6]_[PIN4][PIN3][PIN2][PIN1] (PIN8=Lのデータ)
 
-	// Left side
-	if (x < 0x40) {
-		// UP
-		if		(y < 0x40) hat_data = HORI_HAT_UP_LEFT;
-		// DOWN
-		else if	(y > 0xc0) hat_data = HORI_HAT_DOWN_LEFT;
-		// LEFT
-		else hat_data = HORI_HAT_LEFT;
-	// Right Side
-	}else if (x > 0xc0) {
-		// UP
-		if		(y < 0x40) hat_data = HORI_HAT_UP_RIGHT;
-		// DOWN
-		else if	(y > 0xc0) hat_data = HORI_HAT_DOWN_RIGHT;
-		// RIGHT
-		else hat_data = HORI_HAT_RIGHT;
-	// Center Side
-	}else{
-		// UP
-		if		(y < 0x40) hat_data = HORI_HAT_UP;
-		// DOWN
-		else if	(y > 0xc0) hat_data = HORI_HAT_DOWN;
-		// CENTER
-		else hat_data = HORI_HAT_CENTER;
-	}
-	return hat_data;
+// デジタルモードデータ
+// CyberData[0] = 0b00[E2][E1]_[D] [C] [TH DOWN][TH UP]
+// CyberData[1] = 0b00[B][A]_[RIGHT] [LEFT] [DOWN][UP]
+
+// アナログモードデータ (出力順ががXE1-AJと逆、このサブルーチン内でPCと同様になるようにしている)
+// CyberData[2] = 0b0000_[E1][E2][F][G]
+// CyberData[3] = 0b0000_[A] [B] [C][D]
+// CyberData[4] = 0b0000_Yデータ[7:4]
+// CyberData[5] = (未使用)
+// CyberData[6] = 0b0000_Zデータ[7:4] 
+// CyberData[7] = 0b0000_Xデータ[7:4]
+// CyberData[8] = 0b0000_Yデータ[3:0]
+// CyberData[9] = (未使用)
+// CyberData[10]= 0b0000_Zデータ[3:0]
+// CyberData[11]= 0b0000_Xデータ[3:0]
+// CyberData[12] = (未使用)
+// CyberData[13]= 0b0000_[A] [B] [A'][B']
+
+  int loopcnt;
+  int timeout;
+  unsigned char *temp;
+  unsigned char data_h,data_l;
+
+  CYBERMD_REQOFF;
+  temp = ptr;
+  _delay_us(5);
+  data_l = PORTB & 0x30 | PORTC & 0x0f;		//Data0: Digtal HIGH
+
+  CYBERMD_REQON;
+  _delay_us(5);
+  data_h = PORTB & 0x30 | PORTC & 0x0f;		//Data1: Digtal LOW
+
+  //データ位置がPCモードと逆なので辻褄をあわせる  
+  *temp = data_h;
+  temp++;
+  *temp = data_l;
+  temp++;
+  
+
+  CYBERMD_REQOFF;
+
+  for (loopcnt = 0; loopcnt <= 5; loopcnt++) {
+    for (timeout = 0;; timeout++)
+    {
+      if ((CYBERMMD_ACK_EQLOW)&(CYBERMD_LH_EQLOW)) break;
+      if (timeout == TIMEOUTMAX) {
+        return ERR_TIMEOUT;
+      }
+    }
+    data_l = PORTC & 0x0f;					//Data2,4,6,8,10,12 ACK1,3,5,7,9,11
+
+    for (timeout = 0;; timeout++)
+    {
+      if ((CYBERMMD_ACK_EQLOW)&(CYBERMD_LH_EQHIGH)) break;
+      if (timeout == TIMEOUTMAX) {
+        return ERR_TIMEOUT;
+      }
+    }
+    data_h = PORTC & 0x0f;					//Data2,4,6,8,10,12 ACK1,3,5,7,9,11
+
+    //データ位置がPCモードと逆なので辻褄をあわせる  
+    *temp = data_h;
+    temp++;
+    *temp = data_l;
+    temp++;
+
+	if (loopcnt == 5 ) return ERR_NONE;
+  }
+  return ERR_TIMEOUT;
+
 }
+/*********************************************************************
+* Function: int cyberInput(unsigned char *)
+* Overview: CyberStickの通信ルーチン (MD mode対応)
+* PreCondition: None
+* Input: 読み取りデータの格納先
+* Output: TIMEOUT
+*
+********************************************************************/
+int cyberInput(unsigned char *ptr) {
+	if (TRISMODE_EQMD) 	return cyberMdInput(ptr);				//XE1AP MDmodeのCyberStickのデータ処理
+	else return cyberAtariInput(ptr);
+}
+
+
 
 /*********************************************************************
 * Function: void makeMD6BDataForSEGAPAD(void)
@@ -708,14 +813,13 @@ unsigned char makeHoriHatData(unsigned char x,unsigned char y)
 ********************************************************************/
 void makeMD6BDataForSEGAPAD(void)
 {  
-	unsigned char x,y;
-	
-	x = 0x80;
-	y = 0x80;
-	
 	//SEGA6ボタンパッドの制約から
 	//このルーチンの再実行は1.8ms以上間隔を空ける必要がある
-
+	//そのため、HID intervalは1ms設定をしてはいけない
+	unsigned char startFlag;
+	
+	startFlag = true;
+	
     //(読み捨て) 0State目 (L)
     PORTBbits.RB5 = 0;
     _delay_us(100);
@@ -728,16 +832,17 @@ void makeMD6BDataForSEGAPAD(void)
     PORTBbits.RB5 = 0;
     _delay_us(100);
     if (PORTBbits.RB4 == 0 ) VAL_MD6BDATA(MD6B_A);		// Button3 (A:RB4)
-    if (PORTBbits.RB7 == 0 ) VAL_MD6BDATA(MD6B_START);	// Button8 (START:RB7)
+//  if (PORTBbits.RB7 == 0 ) VAL_MD6BDATA(MD6B_START);	// Button8 (START:RB7)
+    if (PORTBbits.RB7 == 0 ) startFlag = false;			// Button8 (START:RB7) ※後で処理する
 
     // 3State目(H)	3ボタンPADのデータ(H側)はここで読み込む
     PORTBbits.RB5 = 1;
     _delay_us(100);
 
-    if (PORTCbits.RC0 == 0 ) y = 0x00;						// UP     :RC0
-    if (PORTCbits.RC1 == 0 ) y = 0xff;						// DOWN   :RC1
-    if (PORTCbits.RC2 == 0 ) x = 0x00;						// LEFT   :RC2
-    if (PORTCbits.RC3 == 0 ) x = 0xff;						// RIGH   :RC3
+    if (PORTCbits.RC0 == 0 ) joystick_input.val[bDataMD6BXY+1] = 0x00;						// UP     :RC0
+    if (PORTCbits.RC1 == 0 ) joystick_input.val[bDataMD6BXY+1] = 0xff;						// DOWN   :RC1
+    if (PORTCbits.RC2 == 0 ) joystick_input.val[bDataMD6BXY] = 0x00;						// LEFT   :RC2
+    if (PORTCbits.RC3 == 0 ) joystick_input.val[bDataMD6BXY] = 0xff;						// RIGH   :RC3
     // Button (3B)
     if (PORTBbits.RB4 == 0 ) VAL_MD6BDATA(MD6B_B);								// Button2 (B:RC6)
     if (PORTBbits.RB7 == 0 ) VAL_MD6BDATA(MD6B_C);								// Button6 (C:RC7)
@@ -754,21 +859,29 @@ void makeMD6BDataForSEGAPAD(void)
         if (PORTCbits.RC1 == 0 ) VAL_MD6BDATA(MD6B_Y);							// Button1 (Y:RC1)
         if (PORTCbits.RC2 == 0 ) VAL_MD6BDATA(MD6B_X);							// Button4 (X:RC2)
         if (PORTCbits.RC3 == 0 ) VAL_MD6BDATA(MD6B_MODE);						// Button7 (MODE:RC3)
+		if (startFlag == false ) VAL_MD6BDATA(MD6B_START);						// Start Button
 
 		// DUMMY 6State (L)
         PORTBbits.RB5 = 0;
         _delay_us(100);
-    }
+    }else{
+		if (Md3bModeSWCount != MD3B_MODE_TIMEOUT) {
+			if (startFlag == false ) {
+				VAL_MD6BDATA(MD6B_START);										// 普通はStart Button
+				Md3bModeSWCount ++;
+			} else	Md3bModeSWCount = 0; 
+		} else {
+			if (startFlag == false ) {
+				VAL_MD6BDATA(MD6B_MODE);					//TimeOutなのでMODEを代わりに押す
+			} else {
+				Md3bModeSWCount = 0;
+			}
+		}
+	}
+
     // 5State(3B PAD)/7State(6B PAD) (H)
     PORTBbits.RB5 = 1;
-    
-    // Hut Dataの処理 
-    if (bDataMD6BXY == 2 ){
-		joystick_input.val[bDataMD6BXY]   = makeHoriHatData(x,y);
-	}else{
-		joystick_input.val[bDataMD6BXY]   = x;
-		joystick_input.val[bDataMD6BXY+1] = y;
-	}
+
 }
 
 /*********************************************************************
@@ -783,10 +896,6 @@ void makeMD6BDataForAtari(void)
 {  
 	unsigned char x,y,z;
 
-	x = 0x80;
-	y = 0x80;
-	z = 0x80;
-	
     //Input Data
     CyberMode = cyberInput(CyberData);											// CyberStickのプロトコル処理
     																			// CyberModeは他でも参照しているので一度変数に入れる
@@ -794,16 +903,16 @@ void makeMD6BDataForAtari(void)
         //Cyber Stick Digital mode
         if ((CyberData[1] & 0x03) == 0  ){   VAL_MD6BCYBERDATA(CYBER_SELECT);	// Button7 (SELECT:MODE) ※XE1-APのみ対応
         }else{
-            if ((CyberData[1] & 0x01) == 0  ) 	y = 0x00;  	// UP
-            if ((CyberData[1] & 0x02) == 0  ) 	y = 0xFF;  	// DOWN
-            if ((CyberData[0] & 0x01) == 0  ) 	z = 0x00;  	// Throt UP
-            if ((CyberData[0] & 0x02) == 0  ) 	z = 0xFF;  	// Throt DOWN
+            if ((CyberData[1] & 0x01) == 0  ) 	joystick_input.val[bDataCyMDXY+1] = 0x00;  	// UP
+            if ((CyberData[1] & 0x02) == 0  ) 	joystick_input.val[bDataCyMDXY+1] = 0xFF;  	// DOWN
+            if ((CyberData[0] & 0x01) == 0  ) 	joystick_input.val[bDataCyMDZ] = 0x00;  	// Throt UP
+            if ((CyberData[0] & 0x02) == 0  ) 	joystick_input.val[bDataCyMDZ] = 0xFF;  	// Throt DOWN
         }
 
         if ((CyberData[1] & 0x0C) == 0  ){   VAL_MD6BCYBERDATA(CYBER_START);		// Button8 (START) ※XE1-APのみ対応
         }else{
-            if ((CyberData[1] & 0x04) == 0  ) 	x = 0x00;  	// LEFT
-            if ((CyberData[1] & 0x08) == 0  ) 	x = 0xFF;  	// RIGHT
+            if ((CyberData[1] & 0x04) == 0  ) 	joystick_input.val[bDataCyMDXY] = 0x00;  	// LEFT
+            if ((CyberData[1] & 0x08) == 0  ) 	joystick_input.val[bDataCyMDXY] = 0xFF;  	// RIGHT
             if ((CyberData[0] & 0x04) == 0  ) 	VAL_MD6BCYBERDATA(CYBER_C);		// Button6 (C)
             if ((CyberData[0] & 0x08) == 0  ) 	VAL_MD6BCYBERDATA(CYBER_D);		// Button4 (D:X)
         }
@@ -824,6 +933,15 @@ void makeMD6BDataForAtari(void)
         x = calFixedVal(x,centerX,muxXY,slewX);
         z = calFixedVal(z,centerZ,muxZ,slewZ);
 
+		//xyzの反転処理
+		if ((bDataCyberRvXYZ & CYBER_MD6B_RVX) != 0x00)	x = 0xff - x;
+		if ((bDataCyberRvXYZ & CYBER_MD6B_RVY) != 0x00)	y = 0xff - y;
+		if ((bDataCyberRvXYZ & CYBER_MD6B_RVZ) != 0x00)	z = 0xff - z;
+
+        joystick_input.val[bDataCyMDZ] = z;
+        joystick_input.val[MD6B_XY_STICK] = x;
+        joystick_input.val[MD6B_XY_STICK+1] = y;
+
 		// ボタンデータの作成
         if ((CyberData[12] & 0x02) == 0 ) 	VAL_MD6BCYBERDATA(CYBER_Ad);  		// Button3  (A')
         if ((CyberData[12] & 0x01) == 0 ) 	VAL_MD6BCYBERDATA(CYBER_Bd);		// Button2  (B')
@@ -838,22 +956,139 @@ void makeMD6BDataForAtari(void)
 
     }
 
-    // Hut Dataの処理 
-    if (bDataCyMDXY == HORI16B_BUTTON_HATXY ){
-		joystick_input.val[bDataCyMDXY]   = makeHoriHatData(x,y);
+}
+
+/*********************************************************************
+* Function: unsigned char makeCyberHatData(unsigned char,unsigned char)
+* Overview: HUT Dataを作成
+* PreCondition: None
+* Input: X,Yのアナログ値
+* Output: Hut data
+*
+********************************************************************/
+unsigned char makeCyberHatData(unsigned char x,unsigned char y)
+{  
+	unsigned char hat_data;
+	
+
+	// Left side
+	if (x < 0x40) {
+		// UP
+		if		(y < 0x40) hat_data = HAT_UP_LEFT;
+		// DOWN
+		else if	(y > 0xc0) hat_data = HAT_DOWN_LEFT;
+		// LEFT
+		else hat_data = HAT_LEFT;
+	// Right Side
+	}else if (x > 0xc0) {
+		// UP
+		if		(y < 0x40) hat_data = HAT_UP_RIGHT;
+		// DOWN
+		else if	(y > 0xc0) hat_data = HAT_DOWN_RIGHT;
+		// RIGHT
+		else hat_data = HAT_RIGHT;
+	// Center Side
 	}else{
-		joystick_input.val[bDataCyMDXY]   = x;
-		joystick_input.val[bDataCyMDXY+1] = y;
+		// UP
+		if		(y < 0x40) hat_data = HAT_UP;
+		// DOWN
+		else if	(y > 0xc0) hat_data = HAT_DOWN;
+		// CENTER
+		else hat_data = HAT_CENTER;
+	}
+	return hat_data;
+}
+
+/*********************************************************************
+* Function: void makeCyberData(void)
+* Overview: XE1AJ-USBのUSBデータ生成します(ATARI/MDモード)
+* PreCondition: Call from APP_DeviceJoystickTasks
+* Input: None
+* Output: None
+*
+********************************************************************/
+void makeCyberData(void)
+{  
+	unsigned char x,y,z;
+
+	x = 0x80;
+	y = 0x80;
+	z = 0x80;
+
+    //Input Data
+    CyberMode = cyberInput(CyberData);
+    if(CyberMode == ERR_TIMEOUT){
+        //Cyber Stick Digital mode
+
+		//PIN1,2
+       	if ((CyberData[1] & 0x03) == 0  ){   VAL_CYBERDATA(CYBER_SELECT);		// Button7 (SELECT:MODE) ※XE1-APのみ対応
+        }else {
+            if ((CyberData[1] & 0x01) == 0  ) 	y = 0x00;  	// UP
+            if ((CyberData[1] & 0x02) == 0  ) 	y = 0xFF;  	// DOWN
+            if ((CyberData[0] & 0x01) == 0  ) 	z = 0x00;  	// Throt UP
+            if ((CyberData[0] & 0x02) == 0  ) 	z = 0xFF;  	// Throt DOWN
+        }
+
+		//PIN3,4
+        if ((CyberData[1] & 0x0C) == 0  ){   VAL_CYBERDATA(CYBER_START);			// Button8 (START) ※XE1-APのみ対応
+		}else{
+            if ((CyberData[1] & 0x04) == 0  ) 	x = 0x00;  	// LEFT
+            if ((CyberData[1] & 0x08) == 0  ) 	x = 0xFF;  	// RIGHT
+            if ((CyberData[0] & 0x04) == 0  ) 	VAL_CYBERDATA(CYBER_C);		// Button6 (C)
+            if ((CyberData[0] & 0x08) == 0  ) 	VAL_CYBERDATA(CYBER_D);		// Button4 (D:X)
+        }
+        
+		//PIN6,7
+        if ((CyberData[1] & 0x10) == 0  ) 	VAL_CYBERDATA(CYBER_A);				// Button1  (A+A')
+        if ((CyberData[1] & 0x20) == 0  ) 	VAL_CYBERDATA(CYBER_B);				// Button2  (B+B')
+        if ((CyberData[0] & 0x10) == 0  ) 	VAL_CYBERDATA(CYBER_E1);			// Button5  (E1)
+        if ((CyberData[0] & 0x20) == 0  ) 	VAL_CYBERDATA(CYBER_E2);			// Button6  (E2)
+
+    }else{
+        //Cyber Stick Analog mode
+        // 生値から8bitのXYZデータを生成する
+        y = CyberData[4] << 4 | CyberData[8];
+        x = CyberData[5] << 4 | CyberData[9];
+        z = CyberData[6] << 4 | CyberData[10];
+
+		// xyzデータの補正計算
+        y = calFixedVal(y,centerY,muxXY,slewY);
+        x = calFixedVal(x,centerX,muxXY,slewX);
+        z = calFixedVal(z,centerZ,muxZ,slewZ);
+
+        if ((CyberData[12] & 0x02) == 0 ) 	VAL_CYBERDATA(CYBER_Ad);  			// Button1  (A')
+        if ((CyberData[12] & 0x01) == 0 ) 	VAL_CYBERDATA(CYBER_Bd);			// Button2  (B')
+        if ((CyberData[12] & 0x08) == 0 ) 	VAL_CYBERDATA(CYBER_A);		  		// Button1  (A)
+        if ((CyberData[12] & 0x04) == 0 ) 	VAL_CYBERDATA(CYBER_B);				// Button2  (B)
+        if ((CyberData[2] & 0x02) == 0  ) 	VAL_CYBERDATA(CYBER_C);				// Button3  (C)
+        if ((CyberData[2] & 0x01) == 0  ) 	VAL_CYBERDATA(CYBER_D);		  		// Button4  (D:X)
+        if ((CyberData[3] & 0x08) == 0  ) 	VAL_CYBERDATA(CYBER_E1);	  		// Button5  (E1:Y)
+        if ((CyberData[3] & 0x04) == 0  ) 	VAL_CYBERDATA(CYBER_E2);			// Button6  (E2:Z)
+        if ((CyberData[3] & 0x01) == 0  ) 	VAL_CYBERDATA(CYBER_SELECT);  		// Button7  (SELECT)
+        if ((CyberData[3] & 0x02) == 0  ) 	VAL_CYBERDATA(CYBER_START);			// Button8  (START)
+    }
+
+	//xyzの反転処理
+	if ((bDataCyberRvXYZ & CYBER_RVX) != 0x00) x = 0xff - x;
+	if ((bDataCyberRvXYZ & CYBER_RVY) != 0x00) y = 0xff - y;
+	if ((bDataCyberRvXYZ & CYBER_RVZ) != 0x00) z = 0xff - z;
+	
+    // Hut Dataの処理 
+    if (bDataCyberXY == CYBER_HAT_STICK ){
+		joystick_input.val[bDataCyberXY]   = makeCyberHatData(x,y);
+	}else{
+		joystick_input.val[bDataCyberXY]   = x;
+		joystick_input.val[bDataCyberXY+1] = y;
 	}
 
-    if (bDataCyMDZ == HORI16B_BUTTON_HATXY ){
-        joystick_input.val[bDataCyMDZ]    = makeHoriHatData(0x80,z);
+    if (bDataCyberZ == CYBER_HAT_STICK ){
+		if ((bDataCyberRvXYZ & CYBER_HATRVZ) != 0x00) joystick_input.val[bDataCyberZ]    = makeCyberHatData(z,0x80);
+		else joystick_input.val[bDataCyberZ]    = makeCyberHatData(0x80,z);
 	}else{
-        joystick_input.val[bDataCyMDZ]    = z;
+		joystick_input.val[bDataCyberZ]    = z;
 	}
 
 }
-
 
 /*********************************************************************
 * Function: void makeConfigDataFillZero(void)
@@ -870,6 +1105,57 @@ void makeConfigDataFillZero(int start)
         ToSendDataBuffer.val[i] = 0x00;
     }
 }
+
+/*********************************************************************
+* Function: void makeConfigDataSendMd16Setting(void)
+* Overview: MD16PADのボタン設定値を返す
+* PreCondition: Call from APP_DeviceJoystickTasks
+* Input: None
+* Output: None
+*
+********************************************************************/
+void makeConfigDataSendMd16Setting(void)
+{  
+	int i;
+
+	for (i=0;i<16;i++){
+		ToSendDataBuffer.val[1+i]			= bDataMD6B[i];
+	}
+	ToSendDataBuffer.val[1+16+0]			= bDataMD6BXY;
+
+	makeConfigDataFillZero(18);
+
+}
+
+
+/*********************************************************************
+* Function: void makeConfigDataSendCyberSetting(void)
+* Overview: CyberStickのボタン設定値を返す
+* PreCondition: Call from APP_DeviceJoystickTasks
+* Input: None
+* Output: None
+*
+********************************************************************/
+void makeConfigDataSendCyberSetting(void)
+{  
+	int i;
+
+	for (i=0;i<20;i++){
+	    ToSendDataBuffer.val[1+i]			= bDataCyber[i];
+	}
+	for (i=0;i<20;i++){
+		ToSendDataBuffer.val[1+20+i]		= bDataCyMDmode[i];
+	}
+	ToSendDataBuffer.val[1+20+20+0]		= bDataCyMDXY;
+	ToSendDataBuffer.val[1+20+20+1]		= bDataCyMDZ ;
+    ToSendDataBuffer.val[1+20+20+2]		= bDataCyberXY ;
+    ToSendDataBuffer.val[1+20+20+3]		= bDataCyberZ ;
+    ToSendDataBuffer.val[1+20+20+4]		= bDataCyberRvXYZ ;
+
+	makeConfigDataFillZero(46);
+
+}
+
 
 /*********************************************************************
 * Function: void makeConfigDataFirmwareVer(void)
@@ -920,66 +1206,13 @@ void makeConfigDataSendRawData(void)
 ********************************************************************/
 void makeConfigDataSendSettingData(void)
 {  
-	int i;
-
     ToSendDataBuffer.val[1] = muxXY;            								//2=1x mode 3=1.5x mode 4=2xmode
     ToSendDataBuffer.val[2] = muxZ;            									//2=1x mode 3=1.5x mode 4=2xmode
     ToSendDataBuffer.val[3] = centerX;          								//センターの無視する値(X)
     ToSendDataBuffer.val[4] = centerY;          								//センターの無視する値(Y)
     ToSendDataBuffer.val[5] = centerZ;          								//センターの無視する値(Z)
-
-
 	makeConfigDataFillZero(6);
-
 }
-
-/*********************************************************************
-* Function: void makeConfigDataSendMd16Setting(void)
-* Overview: MD16PADのボタン設定値を返す
-* PreCondition: Call from APP_DeviceJoystickTasks
-* Input: None
-* Output: None
-*
-********************************************************************/
-void makeConfigDataSendMd16Setting(void)
-{  
-	int i;
-
-	for (i=0;i<16;i++){
-		ToSendDataBuffer.val[1+i]			= bDataMD6B[i];
-	}
-	ToSendDataBuffer.val[1+16+0]			= bDataMD6BXY;
-
-	makeConfigDataFillZero(18);
-
-}
-
-
-/*********************************************************************
-* Function: void makeConfigDataSendCyberSetting(void)
-* Overview: CyberStickのボタン設定値を返す
-* PreCondition: Call from APP_DeviceJoystickTasks
-* Input: None
-* Output: None
-*
-********************************************************************/
-void makeConfigDataSendCyberSetting(void)
-{  
-	int i;
-
-	for (i=0;i<20;i++){
-	    ToSendDataBuffer.val[1+i]			= bDataCyber[i];
-	}
-	for (i=0;i<20;i++){
-		ToSendDataBuffer.val[1+20+i]		= bDataCyMDmode[i];
-	}
-	ToSendDataBuffer.val[1+20+20+0]		= bDataCyMDXY;
-	ToSendDataBuffer.val[1+20+20+1]		= bDataCyMDZ ;
-
-	makeConfigDataFillZero(43);
-
-}
-
 
 /*********************************************************************
 * Function: void makeConfigDataOK(void)
@@ -1037,8 +1270,11 @@ void APP_DeviceJoystickInitialize(void)
 
     //enable the HID endpoint
     USBEnableEndpoint(JOYSTICK_EP,USB_IN_ENABLED|USB_HANDSHAKE_ENABLED|USB_DISALLOW_SETUP);
-    USBEnableEndpoint(CYBERCONFIG_EP,USB_IN_ENABLED|USB_OUT_ENABLED|USB_HANDSHAKE_ENABLED|USB_DISALLOW_SETUP);
-    lastReceive = HIDRxPacket(CYBERCONFIG_EP,(uint8_t*)&ReceivedDataBuffer,64);
+    //Cyber Stick mode use EP1 IN/OUT
+    if (!MDMODE_EQON){
+        USBEnableEndpoint(CYBERCONFIG_EP,USB_IN_ENABLED|USB_OUT_ENABLED|USB_HANDSHAKE_ENABLED|USB_DISALLOW_SETUP);
+        lastReceive = HIDRxPacket(CYBERCONFIG_EP,(uint8_t*)&ReceivedDataBuffer,64);
+    }
   
 }
 
@@ -1054,8 +1290,12 @@ void APP_DeviceJoystickCheckConnect(void)
 {  
 	unsigned char initE2PROM;
 
-    MDMODE_LEDON;																//初期値設定
+    //USBが起動前に設定しておきたい変数はここで設定すること
+
+    MDMODE_LEDOFF;																//初期値設定
     initE2PROM = false;															//設定値強制初期化フラグ
+	XE1APMode = false;															//メガドラモードでのXE1APの有効化フラグ
+	Md3bModeSWCount = 0;														// 3BパッドのMODEスイッチのカウンター
 
     //  CyberStickとの通信ができる様になるには500ms程度時間が必要なので
     //  起動まで念の為１秒間程度待つ
@@ -1068,31 +1308,51 @@ void APP_DeviceJoystickCheckConnect(void)
     if (TRISB != 0xD0){
         //スイッチがATARI側の場合の初期チェック
       
-        cyberInput(CyberData);     											//初回は不正データが出る場合があるので、読み捨て
+        cyberAtariInput(CyberData);     											//初回は不正データが出る場合があるので、読み捨て
         _delay_ms(500); 													//Cyber側のData更新時間を待つ
 
         //Original DEMPAXE1AJ-USB Compatible mode 
         //ATARI mode
         //Check Cyber Stick A Button
         //Yes,SEGA MD6 Controller Compatible mode 
-        if(cyberInput(CyberData) == ERR_TIMEOUT){
+        if(cyberAtariInput(CyberData) == ERR_TIMEOUT){
 			// TimeOutなのでCyberStickデジタルモードとして取り扱う
+            //ATARI 2B mode
+            if ((CyberData[1] & 0x10) == 0  ) 	MDMODE_LEDON;			// Aが押されたのでMDモードで起動
             //Cyber Stick Digital mode
             if ((CyberData[1] & 0x20) == 0  ) 	initE2PROM = true;       // Bが押されたのでE2PROM初期化を実行
         }else{
-            if ((CyberData[12] & 0x08) == 0x0 ) 	initE2PROM = true;     	// Bが押されたのでE2PROM初期化を実行
+            //Cyber Stick Analog mode
+            if ((CyberData[12] & 0x0A) != 0x0A ) 	MDMODE_LEDON;       	// A+A'をチェック、押されている場合はMDモード
+
+	        if ((CyberData[12] & 0x01) == 0 ) 	initE2PROM = true;			// Button2  (B')
+	        if ((CyberData[12] & 0x04) == 0 ) 	initE2PROM = true;			// Button2  (B)
         }
     }else{
-        //スイッチがメガドラ側の場合の初期チェック
-        PORTBbits.RB5 = 1;
-        _delay_us(100);
-        if (PORTBbits.RB4 == 0 ) initE2PROM = true;  	       		    // Bが押されているのでE2PROM初期化を実行
-        MDMODE_LEDON;                                                   // MDモードにセット
+        cyberMdInput(CyberData);     										//初回は不正データが出る場合があるので、読み捨て
+        _delay_ms(500); 													//Cyber側のData更新時間を待つ
+
+        if(cyberMdInput(CyberData) == ERR_TIMEOUT){
+	        //メガドラコントローラ時の初期チェック
+	        //メガドラモードでのXE1APのデジタル時もここにくるが、判別ができないので仕様扱い
+	        MDMODE_LEDON;                                                   // MDモードにセット
+			// CyberDataのデジタルデータだとWait値が少ないので遅いコントローラでは取りこぼす
+			// そのため改めてここで入力をやり直します。
+	        PORTBbits.RB5 = 1;
+	        _delay_us(100);
+	        if (PORTBbits.RB4 == 0 ) initE2PROM = true;  	       		    // Bが押されているのでE2PROM初期化を実行
+        }else{
+			XE1APMode = true;												//メガドラモードでのXE1APの有効化フラグ
+
+            //Cyber Stick Analog mode (MDモードではCyberData[12]は無効データかも）
+	        if ((CyberData[12] & 0x01) == 0 ) 	initE2PROM = true;			// Button2  (B')
+	        if ((CyberData[12] & 0x04) == 0 ) 	initE2PROM = true;			// Button2  (B)
+        }
+
     }
 
-    //USBが起動前に設定しておきたい変数はここで設定
-    usbSerialInit();                                                    // USBSerial番号設定
-    if ((eepromReadByte(0) != 0xA5)|(initE2PROM)) {                       // E2PROM Magic Numberのチェック(SEGAとは異なる)
+    usbSerialInit();                                                      // USBSerial番号設定
+    if ((eepromReadByte(0) != 0x9A)|(initE2PROM)) {                       // E2PROM Magic Numberのチェック
         //E2ROMに設定値が記録されていないので初期値を設定
 		centerX = 0; 			                                                    // CyberStick X軸の遊び値
 	    centerY = 0;            			                                        // CyberStick Y軸の遊び値
@@ -1131,135 +1391,184 @@ void APP_DeviceJoystickTasks(void)
     // 基本的にこの場所にはUSB DescriptorのbInterval間隔で実行されます。
     // ただし、実際はHOSTがIN Packetを送信する時間に依存するので設定値通りにならない場合があります。
     // 実際、ファイティングパッド6Bはintervalは10ms設定ですが、MDmini/WindowsPCでは8ms間隔で実行されます。
+    // XE1AJ-USBはintervalは1ms設定で1ms間隔で実行されます。
 	// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/usbspec/ns-usbspec-_usb_endpoint_descriptor
 
-		////////////////////////////////////////////////
-		// HORI DX Pro Pad モード
-		////////////////////////////////////////////////
+       	if (MDMODE_EQON){
+			////////////////////////////////////////////////
+			// SEGA FightingPAD 6B モード
+			////////////////////////////////////////////////
 
-        //Default Value
-        joystick_input.val[0] = 0x00;										// Button
-        joystick_input.val[1] = 0x00;										// Button
-        joystick_input.val[2] = 0x08;										// Hat
-        joystick_input.val[3] = 0x80;										// LX
-        joystick_input.val[4] = 0x80;										// LY
-        joystick_input.val[5] = 0x80;										// RX
-        joystick_input.val[6] = 0x80;										// RY
-        joystick_input.val[7] = 0x00;										// VendorSpec
-        
+            //Default Value
+            joystick_input.val[0] = 0x01;										// ID
+            joystick_input.val[1] = 0x7f;										// [Not Use] 0x7f
+            joystick_input.val[2] = 0x7f;										// [Not Use] 0x7f
+            joystick_input.val[3] = 0x7f;										// LEFT   0x00, RIGHT  0xFF
+            joystick_input.val[4] = 0x7f;										// UP     0x00, DOWN   0xFF
+            joystick_input.val[5] = 0x0f;										// X A B Y 1b 1b 1b 1b
+            joystick_input.val[6] = 0x00;										// 0b 0b START MODE 0b 0b C Z
+            joystick_input.val[7] = 0x00;										// [Not Use] 0x00
 
 
-		// TRISBを見てDSUB9PにATARI/MDコントローラーの
-		// どちらが接続しているかを判別しています。(TRISの設定自体はSYSTEMINIT)
+			// TRISBを見てDSUB9PにATARI/MDコントローラーの
+			// どちらが接続しているかを判別しています。(TRISの設定自体はSYSTEMINIT)
 
-        if (TRISB == 0xD0){
-			if (PORTBbits.RB6==0){											//モードスイッチのチェック
-				makeMD6BDataForSEGAPAD();									//SEGA MDパッドのデータ処理
+            if (TRISMODE_EQMD){													//出力設定がメガドラ (DSUB7PIN[RB5]=OUTPUT)
+				if (DSUBPIN8_EQGND){											//モードスイッチのチェック
+					makeMD6BDataForSEGAPAD();									//SEGA MDパッドのデータ処理
+                }
+            }else{
+                //Switch check
+                if (DSUBPIN9_EQGND){											//モードスイッチのチェック
+					makeMD6BDataForAtari();										//ATARI+CyberStickのデータ処理
+                }
             }
-//              TRISB = 0xD0;										//次の判別の為にTRISは戻す
+    	    //Send the packet over USB to the host.
+	        lastTransmissionEP1 = HIDTxPacket(JOYSTICK_EP, (uint8_t*)&joystick_input, sizeof(joystick_input));
         }else{
-            //Switch check
-            if (PORTBbits.RB7 == 0 ){										//モードスイッチのチェック
-				makeMD6BDataForAtari();										//ATARI+CyberStickのデータ処理
-            }
-        }
+			////////////////////////////////////////////////
+            // DEMPA CyberStick mode
+			////////////////////////////////////////////////
 
-        //Send the packet over USB to the host.
-        lastTransmissionEP1 = HIDTxPacket(JOYSTICK_EP, (uint8_t*)&joystick_input, sizeof(joystick_input));
+            //Default Value (DirectInputフォーマット)
+	        joystick_input.val[0] = 0x00;										// Button8-1
+	        joystick_input.val[1] = 0x00;										// Button13-9 (上位バイトはダミー)
+	        joystick_input.val[2] = 0x08;										// Hat
+	        joystick_input.val[3] = 0x80;										// LX
+	        joystick_input.val[4] = 0x80;										// LY
+	        joystick_input.val[5] = 0x80;										// RX
+	        joystick_input.val[6] = 0x80;										// RY
+	        joystick_input.val[7] = 0x00;										// VendorSpec (Not Use)送ってはダメ
+
+
+            if (TRISMODE_EQMD){													//出力設定がメガドラ (DSUB7PIN[RB5]=OUTPUT)
+				if (DSUBPIN8_EQGND){											//モードスイッチのチェック (DSUB8PIN=GND)
+					if (XE1APMode == true) 	makeCyberData();					//XE1AP MDmodeのCyberStickのデータ処理
+                }
+            }else{
+	            //Switch check (MD or Cyber)
+                if (DSUBPIN9_EQGND){											//モードスイッチのチェック(DSUB9PIN=GND)
+					makeCyberData();											//ATARI+CyberStickのデータ処理
+                }
+            }
+
+	        //Send the packet over USB to the host.
+	        //XE1AJ-USBは7Byte送信、メガドライブミニは8バイトでもOKだがWindowsはダメ
+    	    lastTransmissionEP1 = HIDTxPacket(JOYSTICK_EP, (uint8_t*)&joystick_input, sizeof(joystick_input)-1);
+        }
 
     }
     
-    if((HIDRxHandleBusy(lastReceive) == false)||(IncomingHIDCBSetReport==true)){	// Check if data was received from the host.
+    // USB Outパケットの処理(Cyberモードのみ対応)
+    // Outパケットは、SetReportでもHOSTから送信されるのでRxHandleとはSerReportのフラグもチェックする。
+    
+    
+    if (!MDMODE_EQON){															// CyberStick Modeかどうかのチェック
+        // CyberStick mode Config Data RCV/TX
+        if((HIDRxHandleBusy(lastReceive) == false)||(IncomingHIDCBSetReport==true)){	// Check if data was received from the host.
             
-        if (ReceivedDataBuffer.val[0] != 0){								// 1Byte目が実行するCMD
-            ToSendDataBuffer.val[0] = ReceivedDataBuffer.val[0];			// とりあえずエコーバックさせておく(暫定実装)
+            if (ReceivedDataBuffer.val[0] != 0){								// 1Byte目が実行するCMD
+                ToSendDataBuffer.val[0] = ReceivedDataBuffer.val[0];			// とりあえずエコーバックさせておく(暫定実装)
+            }
+
+			//実際のCMD処理
+            switch(ReceivedDataBuffer.val[0]){
+                case 0x01:	//Firmware Version
+	                makeConfigDataFirmwareVer();
+                break;
+
+                case 0x02:  //Send RAW DATA (for debug)
+	                makeConfigDataSendRawData();
+                break;
+
+                case 0x03:  //Send Setting Data
+	                makeConfigDataSendSettingData();
+                break;
+
+                case 0x04:  //Set Setting Data
+
+	                // HOSTから送信された各補正値をセットして再計算を実施する
+                    muxXY = ReceivedDataBuffer.val[1];
+                    muxZ  = ReceivedDataBuffer.val[2];
+                    centerX = ReceivedDataBuffer.val[3];
+                    centerY = ReceivedDataBuffer.val[4];
+                    centerZ = ReceivedDataBuffer.val[5];
+                    calcSlew();
+
+	                makeConfigDataOK();
+
+                break;
+
+                case 0x81:  //Set MD6B mode  KeyAssign
+                	//データの配置とボタンフォーマットはDefinitionを参照
+                    for (i=0;i<16;i++){
+						bDataMD6B[i] = ReceivedDataBuffer.val[i+1];
+					}
+					bDataMD6BXY = ReceivedDataBuffer.val[16+1+0];
+	                makeConfigDataOK();
+                break;
+
+                case 0x82:  //Set MD6B mode CyberStick KeyAssign
+                	//データの配置とボタンフォーマットはDefinitionを参照
+                    for (i=0;i<20;i++){
+						bDataCyMDmode[i] = ReceivedDataBuffer.val[i+1];
+					}
+					bDataCyMDXY = ReceivedDataBuffer.val[20+1+0];
+					bDataCyMDZ = ReceivedDataBuffer.val[20+1+1];
+					bDataCyberRvXYZ = (bDataCyberRvXYZ & 0xf0) | (ReceivedDataBuffer.val[20+1+2] & 0x0f);
+	                makeConfigDataOK();
+                break;
+
+                case 0x83:  //Set CyberStick mode CyberStick KeyAssign
+                	//データの配置とボタンフォーマットはDefinitionを参照
+                    for (i=0;i<20;i++){
+						bDataCyber[i] = ReceivedDataBuffer.val[i+1];
+					}
+					bDataCyberXY = ReceivedDataBuffer.val[20+1+0];
+					bDataCyberZ = ReceivedDataBuffer.val[20+1+1];
+					bDataCyberRvXYZ = (bDataCyberRvXYZ & 0x0f) | (ReceivedDataBuffer.val[20+1+2] & 0xf0);
+	                makeConfigDataOK();
+                break;
+
+                case 0x84:  //Init Setting
+                	//ボタン配置を初期状態に戻します。
+                    eepromConfigMake(); 
+                    makeConfigDataOK();
+                break;
+                
+	            case 0x85:  //Send Botton Setting (MD16B)
+	            	// ファイティングパッド6Bモード時のSEGAパッドのボタン設定情報を送信
+	                makeConfigDataSendMd16Setting();
+	            break;
+
+	            case 0x86:  //Send Botton Setting (Cyberstick)
+	            	// CyberStick時のSEGAパッド/XE1AJ-USBのボタン設定情報を送信
+	                makeConfigDataSendCyberSetting();
+	            break;
+
+                case 0x05:  //EEPROM Setting 
+					// E2PROMに設定値を保存する。
+                    eepromConfigSave();
+                    eepromBDataSave();
+	                makeConfigDataOK();
+                break;
+
+                default:
+                    if (ReceivedDataBuffer.val[0] != 0){
+						makeConfigDataERR();									//非対応CMD
+                    }
+                break;
+            }
+
+            if(!HIDTxHandleBusy(lastTransmissionEP2))
+                lastTransmissionEP2 = HIDTxPacket(CYBERCONFIG_EP,(uint8_t*)&ToSendDataBuffer,64);
+
+            IncomingHIDCBSetReport = false;
+            //Re-arm the OUT endpoint for the next packet
+            lastReceive = HIDRxPacket(CYBERCONFIG_EP,(uint8_t*)&ReceivedDataBuffer,64);
         }
-
-		//実際のCMD処理
-        switch(ReceivedDataBuffer.val[0]){
-            case 0x01:	//Firmware Version
-                makeConfigDataFirmwareVer();
-            break;
-
-            case 0x02:  //Send RAW DATA (for debug)
-                makeConfigDataSendRawData();
-            break;
-
-            case 0x03:  //Send Setting Data (Cyber XY Setting)
-                makeConfigDataSendSettingData();
-            break;
-
-            case 0x04:  //Set Setting Data
-
-                // HOSTから送信された各補正値をセットして再計算を実施する
-                muxXY = ReceivedDataBuffer.val[1];
-                muxZ  = ReceivedDataBuffer.val[2];
-                centerX = ReceivedDataBuffer.val[3];
-                centerY = ReceivedDataBuffer.val[4];
-                centerZ = ReceivedDataBuffer.val[5];
-                calcSlew();
-
-                makeConfigDataOK();
-
-            break;
-
-
-            case 0x81:  //Set MD6B mode  KeyAssign
-            	//データの配置とボタンフォーマットはDefinitionを参照
-                for (i=0;i<16;i++){
-					bDataMD6B[i] = ReceivedDataBuffer.val[i+1];
-				}
-				bDataMD6BXY = ReceivedDataBuffer.val[16+1+0];
-                makeConfigDataOK();
-            break;
-
-            case 0x82:  //Set MD6B mode CyberStick KeyAssign
-            	//データの配置とボタンフォーマットはDefinitionを参照
-                for (i=0;i<20;i++){
-					bDataCyMDmode[i] = ReceivedDataBuffer.val[i+1];
-				}
-				bDataCyMDXY = ReceivedDataBuffer.val[20+1+0];
-				bDataCyMDZ = ReceivedDataBuffer.val[20+1+1];
-                makeConfigDataOK();
-            break;
-
-
-            case 0x84:  //Init Setting
-            	//ボタン配置を初期状態に戻します。
-                eepromConfigMake(); 
-                makeConfigDataOK();
-            break;
-
-            case 0x85:  //Send Botton Setting (MD16B)
-                makeConfigDataSendMd16Setting();
-            break;
-
-            case 0x86:  //Send Botton Setting (Cyber)
-                makeConfigDataSendCyberSetting();
-            break;
-
-            case 0x05:  //EEPROM Setting 
-				// E2PROMに設定値を保存する。
-                eepromConfigSave();
-                eepromBDataSave();
-                makeConfigDataOK();
-            break;
-           
-            default:
-                if (ReceivedDataBuffer.val[0] != 0){
-					makeConfigDataERR();									//非対応CMD
-                }
-            break;
-        }
-
-        if(!HIDTxHandleBusy(lastTransmissionEP2))
-            lastTransmissionEP2 = HIDTxPacket(CYBERCONFIG_EP,(uint8_t*)&ToSendDataBuffer,64);
-
-        IncomingHIDCBSetReport = false;
-        //Re-arm the OUT endpoint for the next packet
-        lastReceive = HIDRxPacket(CYBERCONFIG_EP,(uint8_t*)&ReceivedDataBuffer,64);
     }
-
+    
 }//end ProcessIO
 
 

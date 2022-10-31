@@ -1,0 +1,4 @@
+Found and added required header to zip: C:\microchip\mla\v2017_03_06\apps\usb\device\hid_joystick-segamd2\firmware\MPLAB.X\..\..\..\..\..\..\framework\usb\inc\usb_device_hid.h
+Found and added required header to zip: C:\microchip\mla\v2017_03_06\apps\usb\device\hid_joystick-segamd2\firmware\MPLAB.X\..\..\..\..\..\..\framework\usb\inc\usb_device_hid_cyber.h
+Found and added required header to zip: C:\microchip\mla\v2017_03_06\apps\usb\device\hid_joystick-segamd2\firmware\MPLAB.X\..\..\..\..\..\..\framework\usb\src\usb_device_local.h
+Found and added required header to zip: C:\microchip\mla\v2017_03_06\apps\usb\device\hid_joystick-segamd2\firmware\MPLAB.X\..\src\system_config\pic18f14k50_userboard\adc.h
