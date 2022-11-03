@@ -67,9 +67,6 @@
 #define MDMODE_LEDOFF       PORTCbits.RC7 = 0
 #define MDMODE_EQON       	(PORTCbits.RC7 == 1)
 
-//3Bモードの長押しLOOP数 8ms*255 =約2秒
-#define MD3B_MODE_TIMEOUT	400
-
 #define CYBER_REQOFF        PORTBbits.RB6 = 1
 #define CYBER_REQON         PORTBbits.RB6 = 0
 #define CYBER_LH_EQHIGH   	(PORTBbits.RB4 == 1)
@@ -84,12 +81,18 @@
 #define CYBERMD_LH_EQLOW    	(PORTBbits.RB4 == 0)
 #define CYBERMMD_ACK_EQLOW   	(PORTBbits.RB7 == 0)
 
+#define E2PROM_MAGICNUM		0x9B
+//3Bモードの長押しLOOP数 8ms*255 =約2秒
+#define MD3B_MODE_TIMEOUT	400
+
 ///////////////////////////////////////////////////////////////////////
 // Global Value
 ///////////////////////////////////////////////////////////////////////
 unsigned char IncomingHIDCBSetReport =0;
-unsigned char CyberData[14];
-unsigned short Md3bModeSWCount;
+unsigned char CyberData[14];			//
+unsigned short Md3bModeSWCount;			// 3ボタンモードのスタートボタン長押しのカウント
+unsigned short sDataModeSWCountOut;		// スタートボタン長押しのカウントのタイムアウト値(8ms x タイムアウト値)
+
 
 int CyberMode;							// CyberStickの入力状態 (0=正常[アナログモード] 1=TIMEOUT[デジタルモード])
 int XE1APMode;							// XE1AP(メガドラモード）フラグ
@@ -414,7 +417,7 @@ void eepromWriteByte(unsigned char address, unsigned char data)
 ********************************************************************/
 void eepromConfigSave(void)
 {  
-    eepromWriteByte(0,0x9A);
+    eepromWriteByte(0,E2PROM_MAGICNUM);
     eepromWriteByte(1, centerX);
     eepromWriteByte(2, centerY);
     eepromWriteByte(3, centerZ);
@@ -448,6 +451,9 @@ void eepromBDataSave(void)
 	eepromWriteByte(32+20+20+16+3, bDataCyberXY);
 	eepromWriteByte(32+20+20+16+4, bDataCyberZ);
 	eepromWriteByte(32+20+20+16+5, bDataCyberRvXYZ);
+	eepromWriteByte(32+20+20+16+6, sDataModeSWCountOut & 0xff );
+	eepromWriteByte(32+20+20+16+7, ((sDataModeSWCountOut & 0xff00) >> 8) );
+	
 
 }
 
@@ -491,6 +497,9 @@ void eepromConfigLoad(void)
     bDataCyberXY = eepromReadByte(32+20+20+16+3);
     bDataCyberZ = eepromReadByte(32+20+20+16+4);
 	bDataCyberRvXYZ = eepromReadByte(32+20+20+16+5);
+	sDataModeSWCountOut = ((eepromReadByte(32+20+20+16+7)*0x100)|eepromReadByte(32+20+20+16+6));
+
+    
 }
 
 /*********************************************************************
@@ -572,6 +581,7 @@ void eepromConfigMake(void)
     bDataCyberXY = CYBER_XY_STICK; 	// CyberStick モード時のXYデータ位置
     bDataCyberZ = CYBER_Z_STICK;	// CyberStick モード時のXYデータ位置
 	bDataCyberRvXYZ = CYBER_RVZ | CYBER_MD6B_RVZ ;	//XYZのデータ反転フラグ
+	sDataModeSWCountOut = MD3B_MODE_TIMEOUT;	// スタートボタン長押しのカウントのタイムアウト値
 	eepromBDataSave();															// ボタン設定値をE2PROMの保存
 }
     
@@ -865,10 +875,10 @@ void makeMD6BDataForSEGAPAD(void)
         PORTBbits.RB5 = 0;
         _delay_us(100);
     }else{
-		if (Md3bModeSWCount != MD3B_MODE_TIMEOUT) {
+		if (Md3bModeSWCount != sDataModeSWCountOut) {
 			if (startFlag == false ) {
 				VAL_MD6BDATA(MD6B_START);										// 普通はStart Button
-				Md3bModeSWCount ++;
+				if (sDataModeSWCountOut != 0xffff)	Md3bModeSWCount ++;			// ffffの時は当該機能無効
 			} else	Md3bModeSWCount = 0; 
 		} else {
 			if (startFlag == false ) {
@@ -1122,8 +1132,9 @@ void makeConfigDataSendMd16Setting(void)
 		ToSendDataBuffer.val[1+i]			= bDataMD6B[i];
 	}
 	ToSendDataBuffer.val[1+16+0]			= bDataMD6BXY;
-
-	makeConfigDataFillZero(18);
+	ToSendDataBuffer.val[1+16+1]			= sDataModeSWCountOut & 0xff;
+	ToSendDataBuffer.val[1+16+2]			= ((sDataModeSWCountOut & 0xff00) >> 8);
+	makeConfigDataFillZero(20);
 
 }
 
@@ -1170,6 +1181,7 @@ void makeConfigDataFirmwareVer(void)
     ToSendDataBuffer.val[1] = 0x00;
     ToSendDataBuffer.val[2] = 0x00;
 
+ 
     ToSendDataBuffer.val[3] = (VersionWord) & 0xff;   							//アプリVersion
     ToSendDataBuffer.val[4] = (VersionWord>>8) & 0xff;
 	makeConfigDataFillZero(5);
@@ -1327,6 +1339,7 @@ void APP_DeviceJoystickCheckConnect(void)
 
 	        if ((CyberData[12] & 0x01) == 0 ) 	initE2PROM = true;			// Button2  (B')
 	        if ((CyberData[12] & 0x04) == 0 ) 	initE2PROM = true;			// Button2  (B)
+
         }
     }else{
         cyberMdInput(CyberData);     										//初回は不正データが出る場合があるので、読み捨て
@@ -1341,18 +1354,20 @@ void APP_DeviceJoystickCheckConnect(void)
 	        PORTBbits.RB5 = 1;
 	        _delay_us(100);
 	        if (PORTBbits.RB4 == 0 ) initE2PROM = true;  	       		    // Bが押されているのでE2PROM初期化を実行
+
         }else{
 			XE1APMode = true;												//メガドラモードでのXE1APの有効化フラグ
 
             //Cyber Stick Analog mode (MDモードではCyberData[12]は無効データかも）
 	        if ((CyberData[12] & 0x01) == 0 ) 	initE2PROM = true;			// Button2  (B')
 	        if ((CyberData[12] & 0x04) == 0 ) 	initE2PROM = true;			// Button2  (B)
+
         }
 
     }
 
     usbSerialInit();                                                      // USBSerial番号設定
-    if ((eepromReadByte(0) != 0x9A)|(initE2PROM)) {                       // E2PROM Magic Numberのチェック
+    if ((eepromReadByte(0) != E2PROM_MAGICNUM)|(initE2PROM)) {                       // E2PROM Magic Numberのチェック
         //E2ROMに設定値が記録されていないので初期値を設定
 		centerX = 0; 			                                                    // CyberStick X軸の遊び値
 	    centerY = 0;            			                                        // CyberStick Y軸の遊び値
@@ -1505,6 +1520,7 @@ void APP_DeviceJoystickTasks(void)
 						bDataMD6B[i] = ReceivedDataBuffer.val[i+1];
 					}
 					bDataMD6BXY = ReceivedDataBuffer.val[16+1+0];
+					sDataModeSWCountOut = ((ReceivedDataBuffer.val[16+1+2] * 0x100) | ReceivedDataBuffer.val[16+1+1]);
 	                makeConfigDataOK();
                 break;
 
@@ -1553,6 +1569,8 @@ void APP_DeviceJoystickTasks(void)
 	                makeConfigDataOK();
                 break;
 
+
+                
                 default:
                     if (ReceivedDataBuffer.val[0] != 0){
 						makeConfigDataERR();									//非対応CMD
