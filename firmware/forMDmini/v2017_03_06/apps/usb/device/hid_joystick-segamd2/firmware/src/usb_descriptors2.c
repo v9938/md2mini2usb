@@ -138,6 +138,283 @@ const uint8_t configDescriptor2[]={
 
 };
 
+/* Configuration 1 Descriptor */
+const uint8_t configDescriptor2_2[]={
+    /* Configuration Descriptor */
+    0x09,//sizeof(USB_CFG_DSC),    // Size of this descriptor in bytes
+    USB_DESCRIPTOR_CONFIGURATION,                // CONFIGURATION descriptor type
+//    DESC_CONFIG_WORD(0x0022+ 32),                   // Total length of data for this cfg
+    DESC_CONFIG_WORD(0x0022+ 32),                   // Total length of data for this cfg
+    2,                      // Number of interfaces in this cfg
+    1,                      // Index value of this configuration
+    0,                      // Configuration string index
+ //   _DEFAULT | _SELF,               // Attributes, see usb_device.h
+    _DEFAULT | _RWU,               // Attributes, see usb_device.h
+    50,                     // Max power consumption (2X mA)
+
+    /* Interface Descriptor (EP1 JOYSTICK)*/
+    0x09,//sizeof(USB_INTF_DSC),   // Size of this descriptor in bytes
+    USB_DESCRIPTOR_INTERFACE,               // INTERFACE descriptor type
+    0,                      // Interface Number
+    0,                      // Alternate Setting Number
+    1,                      // Number of endpoints in this intf
+    HID_INTF,               // Class code
+    0,     // Subclass code
+    0,     // Protocol code
+    0,                      // Interface string index
+
+    /* HID Class-Specific Descriptor */
+    0x09,//sizeof(USB_HID_DSC)+3,    // Size of this descriptor in bytes RRoj hack
+    DSC_HID,                // HID descriptor type
+    DESC_CONFIG_WORD(0x0111),                 // HID Spec Release Number in BCD format (1.11)
+    0x00,                   // Country Code (0x00 for Not supported)
+    HID_NUM_OF_DSC,         // Number of class descriptors, see usbcfg.h
+    DSC_RPT,                // Report descriptor type
+    DESC_CONFIG_WORD(HID_RPT02_SIZE),   //sizeof(hid_rpt02),      // Size of the report descriptor
+    
+
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    JOYSTICK_EP | _EP_IN,            //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    DESC_CONFIG_WORD(64),        //size
+    0x02,                        //Interval
+
+    // Out pipeはWindowsでは先設定が有効になるので、ここの設定値がWriteFile時に有効になる。
+    //
+    /* Endpoint Descriptor */
+//    0x07,/*sizeof(USB_EP_DSC)*/
+//  USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+//  CYBERCONFIG_EP | _EP_OUT,            //EndpointAddress
+//    _INTERRUPT,                       //Attributes
+//  DESC_CONFIG_WORD(64),        //size
+//  0xA,                        //Interval
+
+    /*--------------------------------------------------------------------*/
+    /* Interface Descriptor (EP2:CONFIG IF) */
+    0x09,//sizeof(USB_INTF_DSC),   // Size of this descriptor in bytes
+    USB_DESCRIPTOR_INTERFACE,               // INTERFACE descriptor type
+    1,                      // Interface Number
+    0,                      // Alternate Setting Number
+    2,                      // Number of endpoints in this intf
+    HID_INTF,               // Class code
+    0,     // Subclass code
+    0,     // Protocol code
+    0,                      // Interface string index
+
+    /* HID Class-Specific Descriptor */
+    0x09,//sizeof(USB_HID_DSC)+3,    // Size of this descriptor in bytes
+    DSC_HID,                // HID descriptor type
+    0x11,0x01,                 // HID Spec Release Number in BCD format (1.11)
+    0x00,                   // Country Code (0x00 for Not supported)
+    HID_NUM_OF_DSC,         // Number of class descriptors, see usbcfg.h
+    DSC_RPT,                // Report descriptor type
+    DESC_CONFIG_WORD(HID_RPT03_SIZE),//sizeof(hid_rpt03),      // Size of the report descriptor
+    
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    CYBERCONFIG_EP | _EP_IN,                   //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    0x40,0x00,                  //size
+    0x01,                        //Interval
+
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    CYBERCONFIG_EP | _EP_OUT,                   //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    0x40,0x00,                  //size
+    0x01                        //Interval
+
+
+};
+/* Configuration 1 Descriptor */
+const uint8_t configDescriptor2_4[]={
+    /* Configuration Descriptor */
+    0x09,//sizeof(USB_CFG_DSC),    // Size of this descriptor in bytes
+    USB_DESCRIPTOR_CONFIGURATION,                // CONFIGURATION descriptor type
+//    DESC_CONFIG_WORD(0x0022+ 32),                   // Total length of data for this cfg
+    DESC_CONFIG_WORD(0x0022+ 32),                   // Total length of data for this cfg
+    2,                      // Number of interfaces in this cfg
+    1,                      // Index value of this configuration
+    0,                      // Configuration string index
+ //   _DEFAULT | _SELF,               // Attributes, see usb_device.h
+    _DEFAULT | _RWU,               // Attributes, see usb_device.h
+    50,                     // Max power consumption (2X mA)
+
+    /* Interface Descriptor (EP1 JOYSTICK)*/
+    0x09,//sizeof(USB_INTF_DSC),   // Size of this descriptor in bytes
+    USB_DESCRIPTOR_INTERFACE,               // INTERFACE descriptor type
+    0,                      // Interface Number
+    0,                      // Alternate Setting Number
+    1,                      // Number of endpoints in this intf
+    HID_INTF,               // Class code
+    0,     // Subclass code
+    0,     // Protocol code
+    0,                      // Interface string index
+
+    /* HID Class-Specific Descriptor */
+    0x09,//sizeof(USB_HID_DSC)+3,    // Size of this descriptor in bytes RRoj hack
+    DSC_HID,                // HID descriptor type
+    DESC_CONFIG_WORD(0x0111),                 // HID Spec Release Number in BCD format (1.11)
+    0x00,                   // Country Code (0x00 for Not supported)
+    HID_NUM_OF_DSC,         // Number of class descriptors, see usbcfg.h
+    DSC_RPT,                // Report descriptor type
+    DESC_CONFIG_WORD(HID_RPT02_SIZE),   //sizeof(hid_rpt02),      // Size of the report descriptor
+    
+
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    JOYSTICK_EP | _EP_IN,            //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    DESC_CONFIG_WORD(64),        //size
+    0x04,                        //Interval
+
+    // Out pipeはWindowsでは先設定が有効になるので、ここの設定値がWriteFile時に有効になる。
+    //
+    /* Endpoint Descriptor */
+//    0x07,/*sizeof(USB_EP_DSC)*/
+//  USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+//  CYBERCONFIG_EP | _EP_OUT,            //EndpointAddress
+//    _INTERRUPT,                       //Attributes
+//  DESC_CONFIG_WORD(64),        //size
+//  0xA,                        //Interval
+
+    /*--------------------------------------------------------------------*/
+    /* Interface Descriptor (EP2:CONFIG IF) */
+    0x09,//sizeof(USB_INTF_DSC),   // Size of this descriptor in bytes
+    USB_DESCRIPTOR_INTERFACE,               // INTERFACE descriptor type
+    1,                      // Interface Number
+    0,                      // Alternate Setting Number
+    2,                      // Number of endpoints in this intf
+    HID_INTF,               // Class code
+    0,     // Subclass code
+    0,     // Protocol code
+    0,                      // Interface string index
+
+    /* HID Class-Specific Descriptor */
+    0x09,//sizeof(USB_HID_DSC)+3,    // Size of this descriptor in bytes
+    DSC_HID,                // HID descriptor type
+    0x11,0x01,                 // HID Spec Release Number in BCD format (1.11)
+    0x00,                   // Country Code (0x00 for Not supported)
+    HID_NUM_OF_DSC,         // Number of class descriptors, see usbcfg.h
+    DSC_RPT,                // Report descriptor type
+    DESC_CONFIG_WORD(HID_RPT03_SIZE),//sizeof(hid_rpt03),      // Size of the report descriptor
+    
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    CYBERCONFIG_EP | _EP_IN,                   //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    0x40,0x00,                  //size
+    0x01,                        //Interval
+
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    CYBERCONFIG_EP | _EP_OUT,                   //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    0x40,0x00,                  //size
+    0x01                        //Interval
+
+
+};
+
+/* Configuration 1 Descriptor */
+const uint8_t configDescriptor2_8[]={
+    /* Configuration Descriptor */
+    0x09,//sizeof(USB_CFG_DSC),    // Size of this descriptor in bytes
+    USB_DESCRIPTOR_CONFIGURATION,                // CONFIGURATION descriptor type
+//    DESC_CONFIG_WORD(0x0022+ 32),                   // Total length of data for this cfg
+    DESC_CONFIG_WORD(0x0022+ 32),                   // Total length of data for this cfg
+    2,                      // Number of interfaces in this cfg
+    1,                      // Index value of this configuration
+    0,                      // Configuration string index
+ //   _DEFAULT | _SELF,               // Attributes, see usb_device.h
+    _DEFAULT | _RWU,               // Attributes, see usb_device.h
+    50,                     // Max power consumption (2X mA)
+
+    /* Interface Descriptor (EP1 JOYSTICK)*/
+    0x09,//sizeof(USB_INTF_DSC),   // Size of this descriptor in bytes
+    USB_DESCRIPTOR_INTERFACE,               // INTERFACE descriptor type
+    0,                      // Interface Number
+    0,                      // Alternate Setting Number
+    1,                      // Number of endpoints in this intf
+    HID_INTF,               // Class code
+    0,     // Subclass code
+    0,     // Protocol code
+    0,                      // Interface string index
+
+    /* HID Class-Specific Descriptor */
+    0x09,//sizeof(USB_HID_DSC)+3,    // Size of this descriptor in bytes RRoj hack
+    DSC_HID,                // HID descriptor type
+    DESC_CONFIG_WORD(0x0111),                 // HID Spec Release Number in BCD format (1.11)
+    0x00,                   // Country Code (0x00 for Not supported)
+    HID_NUM_OF_DSC,         // Number of class descriptors, see usbcfg.h
+    DSC_RPT,                // Report descriptor type
+    DESC_CONFIG_WORD(HID_RPT02_SIZE),   //sizeof(hid_rpt02),      // Size of the report descriptor
+    
+
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    JOYSTICK_EP | _EP_IN,            //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    DESC_CONFIG_WORD(64),        //size
+    0x08,                        //Interval
+
+    // Out pipeはWindowsでは先設定が有効になるので、ここの設定値がWriteFile時に有効になる。
+    //
+    /* Endpoint Descriptor */
+//    0x07,/*sizeof(USB_EP_DSC)*/
+//  USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+//  CYBERCONFIG_EP | _EP_OUT,            //EndpointAddress
+//    _INTERRUPT,                       //Attributes
+//  DESC_CONFIG_WORD(64),        //size
+//  0xA,                        //Interval
+
+    /*--------------------------------------------------------------------*/
+    /* Interface Descriptor (EP2:CONFIG IF) */
+    0x09,//sizeof(USB_INTF_DSC),   // Size of this descriptor in bytes
+    USB_DESCRIPTOR_INTERFACE,               // INTERFACE descriptor type
+    1,                      // Interface Number
+    0,                      // Alternate Setting Number
+    2,                      // Number of endpoints in this intf
+    HID_INTF,               // Class code
+    0,     // Subclass code
+    0,     // Protocol code
+    0,                      // Interface string index
+
+    /* HID Class-Specific Descriptor */
+    0x09,//sizeof(USB_HID_DSC)+3,    // Size of this descriptor in bytes
+    DSC_HID,                // HID descriptor type
+    0x11,0x01,                 // HID Spec Release Number in BCD format (1.11)
+    0x00,                   // Country Code (0x00 for Not supported)
+    HID_NUM_OF_DSC,         // Number of class descriptors, see usbcfg.h
+    DSC_RPT,                // Report descriptor type
+    DESC_CONFIG_WORD(HID_RPT03_SIZE),//sizeof(hid_rpt03),      // Size of the report descriptor
+    
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    CYBERCONFIG_EP | _EP_IN,                   //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    0x40,0x00,                  //size
+    0x01,                        //Interval
+
+    /* Endpoint Descriptor */
+    0x07,/*sizeof(USB_EP_DSC)*/
+    USB_DESCRIPTOR_ENDPOINT,    //Endpoint Descriptor
+    CYBERCONFIG_EP | _EP_OUT,                   //EndpointAddress
+    _INTERRUPT,                       //Attributes
+    0x40,0x00,                  //size
+    0x01                        //Interval
+
+
+};
 
 //Language code string descriptor
 const struct{uint8_t bLength;uint8_t bDscType;uint16_t string[1];}sd003={
@@ -159,6 +436,20 @@ sizeof(sd005),USB_DESCRIPTOR_STRING,
 const uint8_t *const USB_CD2_Ptr[]=
 {
     (const uint8_t *const)&configDescriptor2
+};
+//Array of configuration descriptors
+const uint8_t *const USB_CD2_2_Ptr[]=
+{
+    (const uint8_t *const)&configDescriptor2_2
+};
+const uint8_t *const USB_CD2_4_Ptr[]=
+{
+    (const uint8_t *const)&configDescriptor2_4
+};
+
+const uint8_t *const USB_CD2_8_Ptr[]=
+{
+    (const uint8_t *const)&configDescriptor2_8
 };
 
 //Array of string descriptors

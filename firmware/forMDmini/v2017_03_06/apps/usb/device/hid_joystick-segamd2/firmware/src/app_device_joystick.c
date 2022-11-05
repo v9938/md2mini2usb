@@ -81,9 +81,15 @@
 #define CYBERMD_LH_EQLOW    	(PORTBbits.RB4 == 0)
 #define CYBERMMD_ACK_EQLOW   	(PORTBbits.RB7 == 0)
 
-#define E2PROM_MAGICNUM		0x9B
+#define E2PROM_MAGICNUM		0x9C
 //3Bモードの長押しLOOP数 8ms*255 =約2秒
 #define MD3B_MODE_TIMEOUT	400
+
+#define HID_INTERVAL_1MS        1
+#define HID_INTERVAL_2MS        2
+#define HID_INTERVAL_4MS        3
+#define HID_INTERVAL_8MS        4
+
 
 ///////////////////////////////////////////////////////////////////////
 // Global Value
@@ -453,9 +459,21 @@ void eepromBDataSave(void)
 	eepromWriteByte(32+20+20+16+5, bDataCyberRvXYZ);
 	eepromWriteByte(32+20+20+16+6, sDataModeSWCountOut & 0xff );
 	eepromWriteByte(32+20+20+16+7, ((sDataModeSWCountOut & 0xff00) >> 8) );
-	
-
+	eepromWriteByte(32+20+20+16+8, HID_Interval);
 }
+/*********************************************************************
+* Function: void eepromIntervalSave(void)
+* Overview: E2PROMにボタン設定データを保存する
+* PreCondition: None
+* Input: None
+* Output: None
+*
+********************************************************************/
+void eepromIntervalSave(unsigned char Interval )
+{  
+	eepromWriteByte(32+20+20+16+8, Interval);
+}
+
 
 /*********************************************************************
 * Function: void eepromBDataSave(void)
@@ -498,6 +516,7 @@ void eepromConfigLoad(void)
     bDataCyberZ = eepromReadByte(32+20+20+16+4);
 	bDataCyberRvXYZ = eepromReadByte(32+20+20+16+5);
 	sDataModeSWCountOut = ((eepromReadByte(32+20+20+16+7)*0x100)|eepromReadByte(32+20+20+16+6));
+    HID_Interval = eepromReadByte(32+20+20+16+8);
 
     
 }
@@ -583,6 +602,8 @@ void eepromConfigMake(void)
 	bDataCyberRvXYZ = CYBER_RVZ | CYBER_MD6B_RVZ ;	//XYZのデータ反転フラグ
 	sDataModeSWCountOut = MD3B_MODE_TIMEOUT;	// スタートボタン長押しのカウントのタイムアウト値
 	eepromBDataSave();															// ボタン設定値をE2PROMの保存
+    HID_Interval = HID_INTERVAL_1MS;
+	eepromIntervalSave(HID_INTERVAL_1MS);										// interval設定値をE2PROMの保存
 }
     
 
@@ -1223,7 +1244,9 @@ void makeConfigDataSendSettingData(void)
     ToSendDataBuffer.val[3] = centerX;          								//センターの無視する値(X)
     ToSendDataBuffer.val[4] = centerY;          								//センターの無視する値(Y)
     ToSendDataBuffer.val[5] = centerZ;          								//センターの無視する値(Z)
-	makeConfigDataFillZero(6);
+    ToSendDataBuffer.val[6] = HID_Interval;          							//HID Intervalの設定値(1=1ms,2=2ms,3=4ms,4=8ms)
+    
+	makeConfigDataFillZero(7);
 }
 
 /*********************************************************************
@@ -1512,6 +1535,11 @@ void APP_DeviceJoystickTasks(void)
 
 	                makeConfigDataOK();
 
+                break;
+
+                case 0x80:  //Set HID interval setting
+                    eepromIntervalSave(ReceivedDataBuffer.val[1]);
+	                makeConfigDataOK();
                 break;
 
                 case 0x81:  //Set MD6B mode  KeyAssign

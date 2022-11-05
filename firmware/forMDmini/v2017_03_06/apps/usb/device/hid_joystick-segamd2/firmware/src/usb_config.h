@@ -75,8 +75,14 @@
 //  a const BYTE *const variable named exactly USB_CD_Ptr[] must exist.
 #define USB_USER_CONFIG_DESCRIPTOR USB_CD_Ptr
 #define USB_USER_CONFIG2_DESCRIPTOR USB_CD2_Ptr
+#define USB_USER_CONFIG2_2_DESCRIPTOR USB_CD2_2_Ptr
+#define USB_USER_CONFIG2_4_DESCRIPTOR USB_CD2_4_Ptr
+#define USB_USER_CONFIG2_8_DESCRIPTOR USB_CD2_8_Ptr
 #define USB_USER_CONFIG_DESCRIPTOR_INCLUDE extern const uint8_t *const USB_CD_Ptr[]
 #define USB_USER_CONFIG2_DESCRIPTOR_INCLUDE extern const uint8_t *const USB_CD2_Ptr[]
+#define USB_USER_CONFIG2_2_DESCRIPTOR_INCLUDE extern const uint8_t *const USB_CD2_2_Ptr[]
+#define USB_USER_CONFIG2_4_DESCRIPTOR_INCLUDE extern const uint8_t *const USB_CD2_4_Ptr[]
+#define USB_USER_CONFIG2_8_DESCRIPTOR_INCLUDE extern const uint8_t *const USB_CD2_8_Ptr[]
 
 
 //------------------------------------------------------------------------------
@@ -209,5 +215,5 @@
 
 /** Section: EXTERNS ********************************************************/
 extern uint8_t SN_update[22];
-
+extern uint8_t HID_Interval;
 #endif //USBCFG_H

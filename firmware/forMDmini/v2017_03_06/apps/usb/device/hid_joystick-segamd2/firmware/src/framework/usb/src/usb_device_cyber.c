@@ -113,6 +113,11 @@ please contact mla_licensing@microchip.com
 #endif
 
 #define MDMODE_EQON       (PORTCbits.RC7 == 1)
+#define HID_INTERVAL_1MS        1
+#define HID_INTERVAL_2MS        2
+#define HID_INTERVAL_4MS        3
+#define HID_INTERVAL_8MS        4
+
 uint8_t SN_update[22];
 
 
@@ -231,13 +236,33 @@ volatile uint8_t CtrlTrfData[USB_EP0_BUFF_SIZE] CTRL_TRF_DATA_ADDR_TAG;
     USB_USER_CONFIG_DESCRIPTOR_INCLUDE;
 #endif
 
-    #if !defined(USB_USER_CONFIG2_DESCRIPTOR)
+#if !defined(USB_USER_CONFIG2_DESCRIPTOR)
     //Array of configuration descriptors
     extern const uint8_t *const USB_CD2_Ptr[];
 #else
     USB_USER_CONFIG2_DESCRIPTOR_INCLUDE;
 #endif
 
+#if !defined(USB_USER_CONFIG2_2_DESCRIPTOR)
+    //Array of configuration descriptors
+    extern const uint8_t *const USB_CD2_2_Ptr[];
+#else
+    USB_USER_CONFIG2_2_DESCRIPTOR_INCLUDE;
+#endif
+
+#if !defined(USB_USER_CONFIG2_4_DESCRIPTOR)
+    //Array of configuration descriptors
+    extern const uint8_t *const USB_CD2_4_Ptr[];
+#else
+    USB_USER_CONFIG2_4_DESCRIPTOR_INCLUDE;
+#endif
+
+#if !defined(USB_USER_CONFIG2_8_DESCRIPTOR)
+    //Array of configuration descriptors
+    extern const uint8_t *const USB_CD2_8_Ptr[];
+#else
+    USB_USER_CONFIG2_8_DESCRIPTOR_INCLUDE;
+#endif
     
 extern const uint8_t *const USB_SD_Ptr[];
 extern const uint8_t *const USB_SD2_Ptr[];
@@ -2100,15 +2125,25 @@ static void USBStdGetDscHandler(void)
                 	if (MDMODE_EQON)
                         inPipes[0].pSrc.bRom = *(USB_CD_Ptr+SetupPkt.bDscIndex);
                     else
+                    {
                         inPipes[0].pSrc.bRom = *(USB_CD2_Ptr+SetupPkt.bDscIndex);
-                    
+                        if (HID_Interval == HID_INTERVAL_2MS)   inPipes[0].pSrc.bRom = *(USB_CD2_2_Ptr+SetupPkt.bDscIndex);
+                        if (HID_Interval == HID_INTERVAL_4MS)   inPipes[0].pSrc.bRom = *(USB_CD2_4_Ptr+SetupPkt.bDscIndex);
+                        if (HID_Interval == HID_INTERVAL_8MS)   inPipes[0].pSrc.bRom = *(USB_CD2_8_Ptr+SetupPkt.bDscIndex);
+                    }
                     #else
                 	if (MDMODE_EQON)
                         inPipes[0].pSrc.bRom = *(USB_USER_CONFIG_DESCRIPTOR+SetupPkt.bDscIndex);
                     else
+                    {
+                
                         inPipes[0].pSrc.bRom = *(USB_USER_CONFIG2_DESCRIPTOR+SetupPkt.bDscIndex);
-                    #endif
+                        if (HID_Interval == HID_INTERVAL_2MS)   inPipes[0].pSrc.bRom = *(USB_USER_CONFIG2_2_DESCRIPTOR+SetupPkt.bDscIndex);
+                        if (HID_Interval == HID_INTERVAL_4MS)   inPipes[0].pSrc.bRom = *(USB_USER_CONFIG2_4_DESCRIPTOR+SetupPkt.bDscIndex);
+                        if (HID_Interval == HID_INTERVAL_8MS)   inPipes[0].pSrc.bRom = *(USB_USER_CONFIG2_8_DESCRIPTOR+SetupPkt.bDscIndex);
 
+                    }
+                    #endif
                     //This must be loaded using byte addressing.  The source pointer
                     //  may not be word aligned for the 16 or 32 bit machines resulting
                     //  in an address error on the dereference.

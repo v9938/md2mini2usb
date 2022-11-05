@@ -303,6 +303,9 @@ typedef struct _USB_HID_DSC
 extern volatile CTRL_TRF_SETUP SetupPkt;
 extern const uint8_t configDescriptor1[];
 extern const uint8_t configDescriptor2[];
+extern const uint8_t configDescriptor2_2[];
+extern const uint8_t configDescriptor2_4[];
+extern const uint8_t configDescriptor2_8[];
 extern volatile uint8_t CtrlTrfData[USB_EP0_BUFF_SIZE];
 
 #endif //HID_H

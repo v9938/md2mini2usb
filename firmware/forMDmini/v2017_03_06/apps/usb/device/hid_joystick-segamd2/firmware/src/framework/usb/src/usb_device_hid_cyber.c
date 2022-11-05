@@ -46,6 +46,12 @@ please contact mla_licensing@microchip.com
 #include "usb_device_hid_cyber.h"
 
 #define MDMODE_EQON       (PORTCbits.RC7 == 1)
+#define HID_INTERVAL_1MS        1
+#define HID_INTERVAL_2MS        2
+#define HID_INTERVAL_4MS        3
+#define HID_INTERVAL_8MS        4
+
+uint8_t HID_Interval;
 
 // *****************************************************************************
 // *****************************************************************************
@@ -184,6 +190,30 @@ void USBCheckHIDRequest(void)
                                 (const uint8_t*)&configDescriptor2 + 18,		//18 is a magic number.  It is the offset from start of the configuration descriptor to the start of the HID descriptor.
                                 sizeof(USB_HID_DSC)+3,
                                 USB_EP0_INCLUDE_ZERO);
+                            
+                            if (HID_Interval == HID_INTERVAL_2MS)
+                            {
+                                USBEP0SendROMPtr(
+                                    (const uint8_t*)&configDescriptor2_2 + 18,		//18 is a magic number.  It is the offset from start of the configuration descriptor to the start of the HID descriptor.
+                                    sizeof(USB_HID_DSC)+3,
+                                    USB_EP0_INCLUDE_ZERO);
+                            }
+                            if (HID_Interval == HID_INTERVAL_4MS)
+                            {
+                                USBEP0SendROMPtr(
+                                    (const uint8_t*)&configDescriptor2_4 + 18,		//18 is a magic number.  It is the offset from start of the configuration descriptor to the start of the HID descriptor.
+                                    sizeof(USB_HID_DSC)+3,
+                                    USB_EP0_INCLUDE_ZERO);
+                            }
+                            if (HID_Interval == HID_INTERVAL_8MS)
+                            {
+                                USBEP0SendROMPtr(
+                                    (const uint8_t*)&configDescriptor2_8 + 18,		//18 is a magic number.  It is the offset from start of the configuration descriptor to the start of the HID descriptor.
+                                    sizeof(USB_HID_DSC)+3,
+                                    USB_EP0_INCLUDE_ZERO);
+                            }
+
+
 	                    break;
 
                         case 1:
@@ -191,7 +221,31 @@ void USBCheckHIDRequest(void)
                                 (const uint8_t*)&configDescriptor2 + 18+9+7,		// magic number.  It is the offset from start of the configuration descriptor to the start of the HID descriptor.
                                 sizeof(USB_HID_DSC)+3,
                                 USB_EP0_INCLUDE_ZERO);
-	                    break;
+
+                            if (HID_Interval == HID_INTERVAL_2MS)
+                            {
+                                USBEP0SendROMPtr(
+                                    (const uint8_t*)&configDescriptor2_2 + 18+9+7,		// magic number.  It is the offset from start of the configuration descriptor to the start of the HID descriptor.
+                                    sizeof(USB_HID_DSC)+3,
+                                    USB_EP0_INCLUDE_ZERO);
+                            }
+                            if (HID_Interval == HID_INTERVAL_4MS)
+                            {
+                                USBEP0SendROMPtr(
+                                    (const uint8_t*)&configDescriptor2_4 + 18+9+7,		// magic number.  It is the offset from start of the configuration descriptor to the start of the HID descriptor.
+                                    sizeof(USB_HID_DSC)+3,
+                                    USB_EP0_INCLUDE_ZERO);
+                            }
+                            if (HID_Interval == HID_INTERVAL_8MS)
+                            {
+                                USBEP0SendROMPtr(
+                                    (const uint8_t*)&configDescriptor2_8 + 18+9+7,		// magic number.  It is the offset from start of the configuration descriptor to the start of the HID descriptor.
+                                    sizeof(USB_HID_DSC)+3,
+                                    USB_EP0_INCLUDE_ZERO);
+                            }
+
+
+                        break;
                         }
 	                }
                 }
