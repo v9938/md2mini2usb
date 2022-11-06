@@ -8,7 +8,7 @@ echo コントローラCボタンを押しながら、デバイスを再接続してください。
 echo デバイスが認識したらボタンから手を離してください。
 echo.
 wait_bootloader.exe
-mphidflash-1.8-win-32.exe -v 04d8 -p e72f -s -w .\forMD2mini\md22usb_0130.hex
+mphidflash-1.8-win-32.exe -v 04d8 -p e72f -s -w .\forMD2mini\md22usb_0131.hex
 echo.
 echo.
 echo MD2mini2USBのFirmware更新が完了しました。

@@ -960,18 +960,18 @@ void makeMD6BDataForAtari(void)
         z = CyberData[6] << 4 | CyberData[10];
 
 		// xyzデータの補正計算
+        z = calFixedVal(z,centerZ,muxZ,slewZ);
         y = calFixedVal(y,centerY,muxXY,slewY);
         x = calFixedVal(x,centerX,muxXY,slewX);
-        z = calFixedVal(z,centerZ,muxZ,slewZ);
 
 		//xyzの反転処理
 		if ((bDataCyberRvXYZ & CYBER_MD6B_RVX) != 0x00)	x = 0xff - x;
 		if ((bDataCyberRvXYZ & CYBER_MD6B_RVY) != 0x00)	y = 0xff - y;
 		if ((bDataCyberRvXYZ & CYBER_MD6B_RVZ) != 0x00)	z = 0xff - z;
 
+        joystick_input.val[bDataCyMDXY] = x;
+        joystick_input.val[bDataCyMDXY+1] = y;
         joystick_input.val[bDataCyMDZ] = z;
-        joystick_input.val[MD6B_XY_STICK] = x;
-        joystick_input.val[MD6B_XY_STICK+1] = y;
 
 		// ボタンデータの作成
         if ((CyberData[12] & 0x02) == 0 ) 	VAL_MD6BCYBERDATA(CYBER_Ad);  		// Button3  (A')
