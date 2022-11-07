@@ -81,7 +81,7 @@
 #define CYBERMD_LH_EQLOW    	(PORTBbits.RB4 == 0)
 #define CYBERMMD_ACK_EQLOW   	(PORTBbits.RB7 == 0)
 
-#define E2PROM_MAGICNUM		0x9C
+#define E2PROM_MAGICNUM		0xA1
 //3Bモードの長押しLOOP数 8ms*255 =約2秒
 #define MD3B_MODE_TIMEOUT	400
 
@@ -90,6 +90,8 @@
 #define HID_INTERVAL_4MS        3
 #define HID_INTERVAL_8MS        4
 
+#define FRAME_RATE_US			16685
+#define USB_RATE_US				16000
 
 ///////////////////////////////////////////////////////////////////////
 // Global Value
@@ -98,6 +100,10 @@ unsigned char IncomingHIDCBSetReport =0;
 unsigned char CyberData[14];			//
 unsigned short Md3bModeSWCount;			// 3ボタンモードのスタートボタン長押しのカウント
 unsigned short sDataModeSWCountOut;		// スタートボタン長押しのカウントのタイムアウト値(8ms x タイムアウト値)
+unsigned short sFrameDiffCount;			// コントローラのアクセス時間と実機のスキャン間隔との差分値
+unsigned char RapidCount;				// 連射テーブルのカウンター
+unsigned char RapidCountOut;			// 連射テーブルの切り替えカウント値
+unsigned char RapidTable;				// 連射テーブルの選択テーブル番号
 
 
 int CyberMode;							// CyberStickの入力状態 (0=正常[アナログモード] 1=TIMEOUT[デジタルモード])
@@ -115,10 +121,16 @@ unsigned char bDataCyMDmode[20];		//CyberStick(MD6B)モード用
 unsigned char bDataCyMDXY;				//CyberStick(MD6B)モード用XY格納位置番号
 unsigned char bDataCyMDZ;				//CyberStick(MD6B)モード用Z格納位置番号
 unsigned char bDataCyberXY;				//CyberStickモード用XY格納位置番号
-unsigned char bDataCyberZ;				//CyberStick	モード用Z格納位置番号
+unsigned char bDataCyberZ;				//CyberStickモード用Z格納位置番号
 unsigned char bDataCyberRvXYZ;			//CyberStickモード用XYZ反転フラグ
 unsigned char bDataMD6B[16];			//Fighting Pad 6Bモード用
 unsigned char bDataMD6BXY ;				//Fighting Pad 6Bモード用XY格納位置番号
+
+unsigned char bDataMD6BRapid[4];		//Fighting Pad 6Bモード用連射ボタン設定
+unsigned char bDataCyberRapid[4];		//CyberStickモード用連射ボタン設定
+unsigned char DataMD6BRapidMask[2];	//Fighting Pad 6Bモード用連射ボタンマスク値
+unsigned char DataCyberRapidMask[2];	//CyberStickモード用連射ボタンマスク値
+
 
 
 //Cyber Stick ボタンデータ配置
@@ -325,6 +337,62 @@ void calcSlew(void)
     slewZ = 0x2000/(128-centerZ);
 }
 
+/*********************************************************************
+* Function: void calcRapidCountOut(void);
+* Overview: USBの転送時間設定からRapidCountの処理をする固定値を計算
+* PreCondition: None
+* Input: None
+* Output: None
+*
+********************************************************************/
+void calcRapidCountOut(void)
+{
+	// RapidCountOutは固定値なので事前に代入しておく
+	RapidCountOut = 2-1; //HID_INTERVAL_8MSの設定値
+    if (HID_Interval == HID_INTERVAL_1MS) RapidCountOut = 16-1;
+    if (HID_Interval == HID_INTERVAL_2MS) RapidCountOut = 8-1;
+    if (HID_Interval == HID_INTERVAL_4MS) RapidCountOut = 4-1;
+
+	//マスク値計算
+    DataMD6BRapidMask[0] = 0xff ^ (bDataMD6BRapid[0] | bDataMD6BRapid[1]);
+    DataMD6BRapidMask[1] = 0xff ^ (bDataMD6BRapid[2] | bDataMD6BRapid[3]);
+    DataCyberRapidMask[0] = 0xff ^ (bDataCyberRapid[0] | bDataCyberRapid[1]);
+    DataCyberRapidMask[1] = 0xff ^ (bDataCyberRapid[2] | bDataCyberRapid[3]);
+
+    //ついでに必要な変数も初期化
+	sFrameDiffCount = 0;
+	RapidCount = 0;
+	RapidTable = 0;
+}
+
+/*********************************************************************
+* Function: void calcRapidTable(void);
+* Overview: シンクロ連射のTable番号の更新処理を行う
+* PreCondition: None
+* Input: None
+* Output: None
+*
+********************************************************************/
+void calcRapidTable(void)
+{
+
+   //16ms経過したかチェック
+    if (RapidCount == RapidCountOut) {
+		RapidCount = 0;														//カウンター初期化
+		sFrameDiffCount = sFrameDiffCount +(FRAME_RATE_US - USB_RATE_US);	//フレームレートと送信差を積算する
+
+		if (sFrameDiffCount > USB_RATE_US)	{								//フレームレート差が送信間隔を超えた場合
+			sFrameDiffCount = sFrameDiffCount - USB_RATE_US;				//フレームレート値から送信間隔をさっ引く
+																			//テーブル値の更新はスキップ
+		} else {
+			if (RapidTable == 0) RapidTable = 1;							//テーブル更新
+			else RapidTable = 0;
+		}
+	}else{
+		RapidCount++;														//16ms未満なのでカウンター値のみ更新
+	}
+}
+
 
 /*********************************************************************
 * Function: unsigned char calFixedVal(unsigned char,unsigned char,unsigned char,unsigned short);
@@ -459,10 +527,10 @@ void eepromBDataSave(void)
 	eepromWriteByte(32+20+20+16+5, bDataCyberRvXYZ);
 	eepromWriteByte(32+20+20+16+6, sDataModeSWCountOut & 0xff );
 	eepromWriteByte(32+20+20+16+7, ((sDataModeSWCountOut & 0xff00) >> 8) );
-	eepromWriteByte(32+20+20+16+8, HID_Interval);
+//	eepromWriteByte(32+20+20+16+8, HID_Interval);
 }
 /*********************************************************************
-* Function: void eepromIntervalSave(void)
+* Function: void eepromIntervalSave(unsigned char)
 * Overview: E2PROMにボタン設定データを保存する
 * PreCondition: None
 * Input: None
@@ -473,11 +541,30 @@ void eepromIntervalSave(unsigned char Interval )
 {  
 	eepromWriteByte(32+20+20+16+8, Interval);
 }
+/*********************************************************************
+* Function: void eepromRapidSave(void)
+* Overview: E2PROMに連射ボタン設定データを保存する
+* PreCondition: None
+* Input: None
+* Output: None
+*
+********************************************************************/
+void eepromRapidSave(void)
+{  
+	eepromWriteByte(32+20+20+16+9,  bDataMD6BRapid[0]);
+	eepromWriteByte(32+20+20+16+10, bDataMD6BRapid[1]);
+	eepromWriteByte(32+20+20+16+11,  bDataMD6BRapid[2]);
+	eepromWriteByte(32+20+20+16+12, bDataMD6BRapid[3]);
+	eepromWriteByte(32+20+20+16+13, bDataCyberRapid[0]);
+	eepromWriteByte(32+20+20+16+14, bDataCyberRapid[1]);
+	eepromWriteByte(32+20+20+16+15, bDataCyberRapid[2]);
+	eepromWriteByte(32+20+20+16+16, bDataCyberRapid[3]);
+}
 
 
 /*********************************************************************
-* Function: void eepromBDataSave(void)
-* Overview: E2PROMにボタン設定データを保存する
+* Function: void eepromConfigLoad(void)
+* Overview: E2PROMにボタン設定データをロードする
 * PreCondition: None
 * Input: None
 * Output: None
@@ -517,6 +604,16 @@ void eepromConfigLoad(void)
 	bDataCyberRvXYZ = eepromReadByte(32+20+20+16+5);
 	sDataModeSWCountOut = ((eepromReadByte(32+20+20+16+7)*0x100)|eepromReadByte(32+20+20+16+6));
     HID_Interval = eepromReadByte(32+20+20+16+8);
+
+    bDataMD6BRapid[0]  = eepromReadByte(32+20+20+16+9);
+	bDataMD6BRapid[1]  = eepromReadByte(32+20+20+16+10);
+    bDataMD6BRapid[2]  = eepromReadByte(32+20+20+16+11);
+	bDataMD6BRapid[3]  = eepromReadByte(32+20+20+16+12);
+	bDataCyberRapid[0] = eepromReadByte(32+20+20+16+13);
+	bDataCyberRapid[1] = eepromReadByte(32+20+20+16+14);
+	bDataCyberRapid[2] = eepromReadByte(32+20+20+16+15);
+	bDataCyberRapid[3] = eepromReadByte(32+20+20+16+16);
+
 
     
 }
@@ -602,8 +699,21 @@ void eepromConfigMake(void)
 	bDataCyberRvXYZ = CYBER_RVZ | CYBER_MD6B_RVZ ;	//XYZのデータ反転フラグ
 	sDataModeSWCountOut = MD3B_MODE_TIMEOUT;	// スタートボタン長押しのカウントのタイムアウト値
 	eepromBDataSave();															// ボタン設定値をE2PROMの保存
+	
     HID_Interval = HID_INTERVAL_1MS;
-	eepromIntervalSave(HID_INTERVAL_1MS);										// interval設定値をE2PROMの保存
+	eepromIntervalSave(HID_INTERVAL_1MS);	// interval設定値をE2PROMの保存(eepromBDataSave()ではワザと保存していない）
+
+	bDataMD6BRapid[0] = 0x00;				//SEGA 6Bパッドモードの連射ボタンマスク値(表[5])
+	bDataMD6BRapid[1] = 0x00;				//SEGA 6Bパッドモードの連射ボタンマスク値(裏[5])
+	bDataMD6BRapid[2] = 0x00;				//SEGA 6Bパッドモードの連射ボタンマスク値(表[6])
+	bDataMD6BRapid[3] = 0x00;				//SEGA 6Bパッドモードの連射ボタンマスク値(裏[6])
+
+	bDataCyberRapid[0] = 0x00;				//XE1AJ-USBモードの連射ボタンマスク値(表[0])
+	bDataCyberRapid[1] = 0x00;				//XE1AJ-USBモードの連射ボタンマスク値(裏[0])
+	bDataCyberRapid[2] = 0x00;				//XE1AJ-USBモードの連射ボタンマスク値(表[1])
+	bDataCyberRapid[3] = 0x00;				//XE1AJ-USBモードの連射ボタンマスク値(裏[1])
+	eepromRapidSave();						//Rapid設定値をE2PROMの保存
+
 }
     
 
@@ -927,6 +1037,9 @@ void makeMD6BDataForAtari(void)
 {  
 	unsigned char x,y,z;
 
+	x = 0x80;
+	y = 0x80;
+	z = 0x80;
     //Input Data
     CyberMode = cyberInput(CyberData);											// CyberStickのプロトコル処理
     																			// CyberModeは他でも参照しているので一度変数に入れる
@@ -934,16 +1047,16 @@ void makeMD6BDataForAtari(void)
         //Cyber Stick Digital mode
         if ((CyberData[1] & 0x03) == 0  ){   VAL_MD6BCYBERDATA(CYBER_SELECT);	// Button7 (SELECT:MODE) ※XE1-APのみ対応
         }else{
-            if ((CyberData[1] & 0x01) == 0  ) 	joystick_input.val[bDataCyMDXY+1] = 0x00;  	// UP
-            if ((CyberData[1] & 0x02) == 0  ) 	joystick_input.val[bDataCyMDXY+1] = 0xFF;  	// DOWN
-            if ((CyberData[0] & 0x01) == 0  ) 	joystick_input.val[bDataCyMDZ] = 0x00;  	// Throt UP
-            if ((CyberData[0] & 0x02) == 0  ) 	joystick_input.val[bDataCyMDZ] = 0xFF;  	// Throt DOWN
+            if ((CyberData[1] & 0x01) == 0  ) 	y = 0x00;  	// UP
+            if ((CyberData[1] & 0x02) == 0  ) 	y = 0xFF;  	// DOWN
+            if ((CyberData[0] & 0x01) == 0  ) 	z = 0x00;  	// Throt UP
+            if ((CyberData[0] & 0x02) == 0  ) 	z = 0xFF;  	// Throt DOWN        }
         }
 
         if ((CyberData[1] & 0x0C) == 0  ){   VAL_MD6BCYBERDATA(CYBER_START);		// Button8 (START) ※XE1-APのみ対応
         }else{
-            if ((CyberData[1] & 0x04) == 0  ) 	joystick_input.val[bDataCyMDXY] = 0x00;  	// LEFT
-            if ((CyberData[1] & 0x08) == 0  ) 	joystick_input.val[bDataCyMDXY] = 0xFF;  	// RIGHT
+            if ((CyberData[1] & 0x04) == 0  ) 	x = 0x00;  	// LEFT
+            if ((CyberData[1] & 0x08) == 0  ) 	x = 0xFF;  	// RIGHT
             if ((CyberData[0] & 0x04) == 0  ) 	VAL_MD6BCYBERDATA(CYBER_C);		// Button6 (C)
             if ((CyberData[0] & 0x08) == 0  ) 	VAL_MD6BCYBERDATA(CYBER_D);		// Button4 (D:X)
         }
@@ -964,14 +1077,6 @@ void makeMD6BDataForAtari(void)
         y = calFixedVal(y,centerY,muxXY,slewY);
         x = calFixedVal(x,centerX,muxXY,slewX);
 
-		//xyzの反転処理
-		if ((bDataCyberRvXYZ & CYBER_MD6B_RVX) != 0x00)	x = 0xff - x;
-		if ((bDataCyberRvXYZ & CYBER_MD6B_RVY) != 0x00)	y = 0xff - y;
-		if ((bDataCyberRvXYZ & CYBER_MD6B_RVZ) != 0x00)	z = 0xff - z;
-
-        joystick_input.val[bDataCyMDXY] = x;
-        joystick_input.val[bDataCyMDXY+1] = y;
-        joystick_input.val[bDataCyMDZ] = z;
 
 		// ボタンデータの作成
         if ((CyberData[12] & 0x02) == 0 ) 	VAL_MD6BCYBERDATA(CYBER_Ad);  		// Button3  (A')
@@ -986,6 +1091,14 @@ void makeMD6BDataForAtari(void)
         if ((CyberData[3] & 0x02) == 0  ) 	VAL_MD6BCYBERDATA(CYBER_START);		// Button8  (START)
 
     }
+	//xyzの反転処理
+	if ((bDataCyberRvXYZ & CYBER_MD6B_RVX) != 0x00)	x = 0xff - x;
+	if ((bDataCyberRvXYZ & CYBER_MD6B_RVY) != 0x00)	y = 0xff - y;
+	if ((bDataCyberRvXYZ & CYBER_MD6B_RVZ) != 0x00)	z = 0xff - z;
+
+    joystick_input.val[bDataCyMDXY] = x;
+    joystick_input.val[bDataCyMDXY+1] = y;
+    joystick_input.val[bDataCyMDZ] = z;
 
 }
 
@@ -1245,8 +1358,16 @@ void makeConfigDataSendSettingData(void)
     ToSendDataBuffer.val[4] = centerY;          								//センターの無視する値(Y)
     ToSendDataBuffer.val[5] = centerZ;          								//センターの無視する値(Z)
     ToSendDataBuffer.val[6] = HID_Interval;          							//HID Intervalの設定値(1=1ms,2=2ms,3=4ms,4=8ms)
+    ToSendDataBuffer.val[7]  = bDataMD6BRapid[0];       						//Fighting Pad 6Bモード用連射ボタン設定（表[5]）
+    ToSendDataBuffer.val[8]  = bDataMD6BRapid[1];       						//Fighting Pad 6Bモード用連射ボタン設定（裏[5]）
+    ToSendDataBuffer.val[9]  = bDataMD6BRapid[2];       						//Fighting Pad 6Bモード用連射ボタン設定（表[6]）
+    ToSendDataBuffer.val[10] = bDataMD6BRapid[3];       						//Fighting Pad 6Bモード用連射ボタン設定（裏[6]）
+    ToSendDataBuffer.val[11] = bDataCyberRapid[0];          					//CyberStickモード用連射ボタン設定（表[0]）
+    ToSendDataBuffer.val[12] = bDataCyberRapid[1];         						//CyberStickモード用連射ボタン設定（裏[0]）
+    ToSendDataBuffer.val[13] = bDataCyberRapid[2];          					//CyberStickモード用連射ボタン設定（表[1]）
+    ToSendDataBuffer.val[14] = bDataCyberRapid[3];         						//CyberStickモード用連射ボタン設定（裏[1]）
     
-	makeConfigDataFillZero(7);
+	makeConfigDataFillZero(15);
 }
 
 /*********************************************************************
@@ -1401,7 +1522,10 @@ void APP_DeviceJoystickCheckConnect(void)
 		eepromConfigMake();															// ボタン配置データを作成保存
     }
     eepromConfigLoad();              		                            // 再ロード
+   	if (MDMODE_EQON)	HID_Interval = HID_INTERVAL_8MS;				// SEGA FP6Bの場合はIntervalは8ms固定なので変数を修正
     calcSlew();															// StickのSlew値を事前に計算
+    calcRapidCountOut();												// 連射の設定値をロード
+   	
 
 }
 
@@ -1421,7 +1545,14 @@ void APP_DeviceJoystickTasks(void)
 	unsigned char sum;
 
     // User Application USB tasks
-    if((USBDeviceState < CONFIGURED_STATE)||(USBSuspendControl==1)) return;
+    if((USBDeviceState < CONFIGURED_STATE)||(USBSuspendControl==1)) 
+    {
+		//メガドラミニでゲームを選択すると再CONFIGされる事があるので、再度同期を取り直す。
+		sFrameDiffCount = 0;
+		RapidCount = 0;
+		RapidTable = 0;
+		return;
+	}
 
     //If the last transmision is complete
     if(!HIDTxHandleBusy(lastTransmissionEP1))    {
@@ -1461,6 +1592,11 @@ void APP_DeviceJoystickTasks(void)
 					makeMD6BDataForAtari();										//ATARI+CyberStickのデータ処理
                 }
             }
+			calcRapidTable();													//16ms経過したかチェック＋補正
+            //シンクロ連射の処理
+            joystick_input.val[5] = (joystick_input.val[5] & DataMD6BRapidMask[0]) | (joystick_input.val[5] & bDataMD6BRapid[RapidTable]);
+            joystick_input.val[6] = (joystick_input.val[6] & DataMD6BRapidMask[1]) | (joystick_input.val[6] & bDataMD6BRapid[RapidTable+2]);
+            
     	    //Send the packet over USB to the host.
 	        lastTransmissionEP1 = HIDTxPacket(JOYSTICK_EP, (uint8_t*)&joystick_input, sizeof(joystick_input));
         }else{
@@ -1489,6 +1625,11 @@ void APP_DeviceJoystickTasks(void)
 					makeCyberData();											//ATARI+CyberStickのデータ処理
                 }
             }
+
+			calcRapidTable();													//16ms経過したかチェック＋補正
+            //シンクロ連射の処理
+            joystick_input.val[0] = (joystick_input.val[0] & DataCyberRapidMask[0]) | (joystick_input.val[0] & bDataCyberRapid[RapidTable]);
+            joystick_input.val[1] = (joystick_input.val[1] & DataCyberRapidMask[1]) | (joystick_input.val[1] & bDataCyberRapid[RapidTable+2]);
 
 	        //Send the packet over USB to the host.
 	        //XE1AJ-USBは7Byte送信、メガドライブミニは8バイトでもOKだがWindowsはダメ
@@ -1580,7 +1721,7 @@ void APP_DeviceJoystickTasks(void)
                     makeConfigDataOK();
                 break;
                 
-	            case 0x85:  //Send Botton Setting (MD16B)
+	            case 0x85:  //Send Botton Setting (MD6B)
 	            	// ファイティングパッド6Bモード時のSEGAパッドのボタン設定情報を送信
 	                makeConfigDataSendMd16Setting();
 	            break;
@@ -1588,6 +1729,23 @@ void APP_DeviceJoystickTasks(void)
 	            case 0x86:  //Send Botton Setting (Cyberstick)
 	            	// CyberStick時のSEGAパッド/XE1AJ-USBのボタン設定情報を送信
 	                makeConfigDataSendCyberSetting();
+	            break;
+
+	            case 0x87:  //シンクロ連射設定 (MD6B/Cyber)
+	            	// SEGA FB6B/XE1AJ-USBモード時のシンクロ連射のボタン設定情報を送信
+	                // HOSTから送信された各補正値をセットして再計算を実施する
+                    bDataMD6BRapid[0]  = ReceivedDataBuffer.val[1];
+                    bDataMD6BRapid[1]  = ReceivedDataBuffer.val[2];
+                    bDataMD6BRapid[2]  = ReceivedDataBuffer.val[3];
+                    bDataMD6BRapid[3]  = ReceivedDataBuffer.val[4];
+                    bDataCyberRapid[0] = ReceivedDataBuffer.val[5];
+                    bDataCyberRapid[1] = ReceivedDataBuffer.val[6];
+                    bDataCyberRapid[2] = ReceivedDataBuffer.val[7];
+                    bDataCyberRapid[3] = ReceivedDataBuffer.val[8];
+                    calcRapidCountOut();
+                    eepromRapidSave();
+	                makeConfigDataOK();
+	                //makeConfigDataSendCyberSetting();
 	            break;
 
                 case 0x05:  //EEPROM Setting 
