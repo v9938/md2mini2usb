@@ -111,6 +111,7 @@ unsigned char RapidCount;				// 連射テーブルのカウンター
 unsigned char RapidCountOut;			// 連射テーブルの切り替えカウント値
 unsigned char RapidTable;				// 連射テーブルの選択テーブル番号
 unsigned char RapidEnable;				// 連射有効/無効スイッチ
+unsigned char RapidStart;				// 連射Start flag
 unsigned short RapidSWCount;			// 連射有効化/無効化までのSELECT長押しのカウント
 unsigned short bRapidSWCountOut;		// 連射有効化/無効化までのSELECT長押しのカウント設定値
 
@@ -377,16 +378,15 @@ void calcRapidCountOut(void)
 }
 
 /*********************************************************************
-* Function: void calcRapidTable(void);
+* Function: void calcRapidTable(unsigned char,unsigned char);
 * Overview: シンクロ連射のTable番号の更新処理を行う
 * PreCondition: None
 * Input: None
 * Output: None
 *
 ********************************************************************/
-void calcRapidTable(void)
+void calcRapidTable(unsigned char stepAmask,unsigned char stepBmask)
 {
-
    //16ms経過したかチェック
     if (RapidCount >= RapidCountOut) {
 		RapidCount = 0;														//カウンター初期化
@@ -409,6 +409,20 @@ void calcRapidTable(void)
 	}else{
 		RapidCount++;														//16ms未満なのでカウンター値のみ更新
 	}
+
+	if ((stepAmask != 0) && (RapidStart)){
+		RapidSpeedCount = 0;										//カウント値リセット
+		RapidTable = 0x00;											//Aテーブルの切り替え
+	}
+	
+	if ((stepBmask != 0) && (RapidStart)){
+		RapidSpeedCount = 0;										//カウント値リセット
+		RapidTable = 0x01;											//Bテーブルの切り替え
+	}
+
+	if ((stepAmask != 0) || (stepBmask != 0))	RapidStart = false;
+	else	RapidStart = true;
+
 }
 
 
@@ -1531,6 +1545,8 @@ void APP_DeviceJoystickCheckConnect(void)
 	XE1APMode = false;															//メガドラモードでのXE1APの有効化フラグ
 	Md3bModeSWCount = 0;														// 3BパッドのMODEスイッチのカウンター
 	RapidSWCount = 0;
+	RapidStart = true;
+
     //  CyberStickとの通信ができる様になるには500ms程度時間が必要なので
     //  起動まで念の為１秒間程度待つ
     _delay_ms(1000); //Bootwait
@@ -1670,7 +1686,9 @@ void APP_DeviceJoystickTasks(void)
 					makeMD6BDataForAtari();										//ATARI+CyberStickのデータ処理
                 }
             }
-			calcRapidTable();													//16ms経過したかチェック＋補正
+			calcRapidTable( ((joystick_input.val[5] & bDataMD6BRapid[0]) | (joystick_input.val[6] & bDataMD6BRapid[2])),
+							((joystick_input.val[5] & bDataMD6BRapid[1]) | (joystick_input.val[6] & bDataMD6BRapid[3])) );		//16ms経過したかチェック＋補正
+
             //シンクロ連射の処理
 			if (RapidEnable){
 	            joystick_input.val[5] = (joystick_input.val[5] & DataMD6BRapidMask[0]) | (joystick_input.val[5] & bDataMD6BRapid[RapidTable]);
@@ -1705,7 +1723,9 @@ void APP_DeviceJoystickTasks(void)
                 }
             }
 
-			calcRapidTable();													//16ms経過したかチェック＋補正
+			calcRapidTable(((joystick_input.val[0] & bDataCyberRapid[0])|(joystick_input.val[1] & bDataCyberRapid[2])) ,
+						   ((joystick_input.val[0] & bDataCyberRapid[1])|(joystick_input.val[1] & bDataCyberRapid[3])));		//16ms経過したかチェック＋補正
+
 			if (RapidEnable){
 	            //シンクロ連射の処理
 	            joystick_input.val[0] = (joystick_input.val[0] & DataCyberRapidMask[0]) | (joystick_input.val[0] & bDataCyberRapid[RapidTable]);
